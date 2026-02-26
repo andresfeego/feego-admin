@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden; /* prevent page-level horizontal scroll */
+}
+
+/* Default theme: LIGHT (ThemeProvider sets data-theme) */
+:root { color-scheme: light; }
+
+html[data-theme="light"] { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+
+html[data-theme="light"] body {
+  background: #eef1f5; /* pinterest-ish light gray */
+  color: #0f172a;
+}
+
+html[data-theme="dark"] body {
+  background: radial-gradient(circle at 20% 10%, #1b2a4a 0%, #0b1020 40%, #070a12 100%);
+  color: #e5e7eb;
+}
+
+/* System theme support */
+html[data-theme="system"] body {
+  background: #eef1f5;
+  color: #0f172a;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] body {
+    background: radial-gradient(circle at 20% 10%, #1b2a4a 0%, #0b1020 40%, #070a12 100%);
+    color: #e5e7eb;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* Theme tokens */
+html[data-theme="light"]{
+  --feego-bg: #eef1f5;
+  --feego-card: rgba(248,250,252,0.85);
+  --feego-card-solid: #f8fafc;
+  --feego-text: #0f172a;
+  --feego-muted: rgba(15,23,42,0.62);
+  --feego-border: rgba(15,23,42,0.12);
+  --feego-shadow: 0 14px 40px rgba(2,6,23,0.08);
+  --feego-primary: #1d4ed8;
+  --feego-primary-2: #4f46e5;
+}
+html[data-theme="dark"]{
+  --feego-bg: #070a12;
+  --feego-card: rgba(255,255,255,0.06);
+  --feego-card-solid: rgba(2,6,23,0.92);
+  --feego-text: #e5e7eb;
+  --feego-muted: rgba(226,232,240,0.65);
+  --feego-border: rgba(255,255,255,0.10);
+  --feego-shadow: 0 22px 60px rgba(0,0,0,0.45);
+  --feego-primary: #60a5fa;
+  --feego-primary-2: #a78bfa;
+}
+
+.feego-muted{ color: var(--feego-muted); }
+
+.feego-input{
+  background: rgba(0,0,0,0.10);
+  border: 1px solid var(--feego-border);
+  color: var(--feego-text);
+  outline: none;
+}
+html[data-theme="light"] .feego-input{ background: rgba(255,255,255,0.9); }
+.feego-input:focus{ box-shadow: 0 0 0 4px rgba(29,78,216,0.15); border-color: rgba(29,78,216,0.35); }
+
+.feego-btn-primary{ background: linear-gradient(135deg, var(--feego-primary), var(--feego-primary-2)); color: #fff; border: 1px solid rgba(255,255,255,0.12); }
+.feego-btn-primary:hover{ filter: brightness(1.05); }
+
+.feego-btn-outline{ background: transparent; color: var(--feego-text); border: 1px solid var(--feego-border); }
+.feego-btn-outline:hover{ background: rgba(255,255,255,0.06); }
+html[data-theme="light"] .feego-btn-outline:hover{ background: rgba(2,6,23,0.04); }
+
+.feego-btn-ghost{ background: transparent; color: var(--feego-text); border: 1px solid transparent; }
+.feego-btn-ghost:hover{ background: rgba(255,255,255,0.06); }
+html[data-theme="light"] .feego-btn-ghost:hover{ background: rgba(2,6,23,0.04); }
+
+/* Card surfaces */
+html[data-theme="light"] .feego-card {
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: 0 10px 30px rgba(2,6,23,0.06);
+}
+
+html[data-theme="dark"] .feego-card {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+  backdrop-filter: blur(14px);
+}
+
+/* Sidebar & mobile surfaces in LIGHT mode */
+html[data-theme="light"] .feego-sidebar {
+  background: rgba(248,250,252,0.85) !important;
+  border-right: 1px solid rgba(15,23,42,0.10) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+html[data-theme="light"] .feego-mobile-header {
+  background: linear-gradient(90deg, #f8fafc, #eef2ff) !important;
+  border-bottom: 1px solid rgba(15,23,42,0.10) !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .feego-mobile-drawer {
+  background: rgba(248,250,252,0.92) !important;
+  border-right: 1px solid rgba(15,23,42,0.10) !important;
+  color: #0f172a !important;
+}
+
+/* Light-mode overrides for common Tailwind utility classes already used in the app.
+   This lets the whole UI switch cleanly without refactoring every component today. */
+html[data-theme="light"] .border-white\/10 { border-color: rgba(15,23,42,0.12) !important; }
+html[data-theme="light"] .bg-white\/5 { background: rgba(255,255,255,0.75) !important; }
+html[data-theme="light"] .bg-black\/20 { background: rgba(255,255,255,0.75) !important; }
+html[data-theme="light"] .bg-black\/30 { background: rgba(255,255,255,0.82) !important; }
+html[data-theme="light"] .bg-slate-950\/80 { background: rgba(248,250,252,0.92) !important; }
+html[data-theme="light"] .bg-slate-950\/90 { background: rgba(248,250,252,0.95) !important; }
+html[data-theme="light"] .bg-slate-950\/95 { background: rgba(248,250,252,0.97) !important; }
+html[data-theme="light"] .from-slate-950 { --tw-gradient-from: #f8fafc !important; }
+html[data-theme="light"] .to-slate-900 { --tw-gradient-to: #eef2ff !important; }
+
+html[data-theme="light"] a { color: #1d4ed8; }
+
+html[data-theme="light"] .text-white { color: #0f172a !important; }
+html[data-theme="light"] .text-slate-200 { color: rgba(15,23,42,0.82) !important; }
+html[data-theme="light"] .text-slate-300 { color: rgba(15,23,42,0.72) !important; }
+html[data-theme="light"] .text-slate-400 { color: rgba(15,23,42,0.60) !important; }
+
+html[data-theme="light"] .backdrop-blur-xl { backdrop-filter: blur(10px) !important; }
+
+/* Modal surfaces */
+.feego-overlay{ background: rgba(0,0,0,0.60); }
+html[data-theme="light"] .feego-overlay{ background: rgba(2,6,23,0.35); }
+
+.feego-modal{
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(2,6,23,0.92);
+  color: #e5e7eb;
+  backdrop-filter: blur(14px);
+}
+html[data-theme="light"] .feego-modal{
+  border: 1px solid rgba(15,23,42,0.12);
+  background: rgba(248,250,252,0.95);
+  color: #0f172a;
+}
