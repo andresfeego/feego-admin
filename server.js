@@ -1140,8 +1140,10 @@ app.post('/api/kanban/project', requireAuth, async (req, res) => {
   }
 });
 
-// FeegoAdmin persistent data (outside OpenClaw workspace)
-const FEEGO_DATA_ROOT = process.env.FEEGO_DATA_ROOT || '/srv/feego-data/feego-admin';
+// FeegoAdmin persistent data
+// - VPS/prod: set FEEGO_DATA_ROOT to something like /srv/feego-data/feego-admin
+// - Local dev: defaults to <repo>/data
+const FEEGO_DATA_ROOT = process.env.FEEGO_DATA_ROOT || path.resolve(process.cwd(), 'data');
 const KANBAN_LOGO_DIR = path.join(FEEGO_DATA_ROOT, 'project-logos');
 fs.mkdirSync(KANBAN_LOGO_DIR, { recursive: true });
 
