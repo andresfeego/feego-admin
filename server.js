@@ -22,6 +22,8 @@ const DB_NAME = process.env.DB_NAME || 'feegosystem_admin_db';
 const DB_USER = process.env.DB_USER || 'feego_admin';
 const DB_PASS = process.env.DB_PASS || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const UI_DIST_DIR = process.env.UI_DIST_DIR || '/opt/feego-admin/ui/dist';
+const UI_DIST_ASSETS_DIR = process.env.UI_DIST_ASSETS_DIR || path.join(UI_DIST_DIR, 'assets');
 
 // TEMP: large limit while migrating sites
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/root/.openclaw/workspace/uploads/andres/inbox';
@@ -57,6 +59,22 @@ function requireAuth(req, res, next) {
   if (req.session && req.session.userId) return next();
   res.status(401).json({ ok: false, error: 'unauthorized' });
 }
+
+function normalizeMountPath(rawPath, fallback) {
+  const source = (rawPath || fallback || '').trim();
+  if (!source) return fallback;
+  const withLeadingSlash = source.startsWith('/') ? source : `/${source}`;
+  const withoutTrailingSlash = withLeadingSlash.replace(/\/+$/, '');
+  return withoutTrailingSlash || '/';
+}
+
+function escapeRegExp(input) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const ADMIN_BASE_PATH = normalizeMountPath(process.env.ADMIN_BASE_PATH, '/administracion');
+const ADMIN_ASSETS_PATH = `${ADMIN_BASE_PATH}/assets`;
+const ADMIN_BASE_REGEX = new RegExp(`^${escapeRegExp(ADMIN_BASE_PATH)}\\/(.*)$`);
 
 function page(html) {
   return `<!doctype html><html lang="es"><head>
@@ -195,17 +213,17 @@ async function wireLogin(){
 }
 
 // React UI (SPA)
-// Serve React under /administracion; keep SSR at /administracion-legacy while migrating.
-app.use('/administracion/assets', express.static('/opt/feego-admin/ui/dist/assets'));
-app.use('/administracion', express.static('/opt/feego-admin/ui/dist'));
-app.get(/^\/administracion\/(.*)$/, (req,res)=> res.sendFile('/opt/feego-admin/ui/dist/index.html'));
+// Serve React under ADMIN_BASE_PATH; keep SSR at /administracion-legacy while migrating.
+app.use(ADMIN_ASSETS_PATH, express.static(UI_DIST_ASSETS_DIR));
+app.use(ADMIN_BASE_PATH, express.static(UI_DIST_DIR));
+app.get(ADMIN_BASE_REGEX, (req, res) => res.sendFile(path.join(UI_DIST_DIR, 'index.html')));
 
 // Temporary: keep old /ui path for quick testing
-app.use('/assets', express.static('/opt/feego-admin/ui/dist/assets'));
-app.use('/ui', express.static('/opt/feego-admin/ui/dist'));
-app.get(/^\/ui\/(.*)$/, (req,res)=> res.sendFile('/opt/feego-admin/ui/dist/index.html'));
+app.use('/assets', express.static(UI_DIST_ASSETS_DIR));
+app.use('/ui', express.static(UI_DIST_DIR));
+app.get(/^\/ui\/(.*)$/, (req, res) => res.sendFile(path.join(UI_DIST_DIR, 'index.html')));
 
-app.get('/', (req, res) => res.redirect('/administracion'));
+app.get('/', (req, res) => res.redirect(ADMIN_BASE_PATH));
 
 app.get('/administracion-legacy', (req, res) => {
   res.type('html').send(page(`
@@ -220,9 +238,9 @@ app.get('/administracion-legacy', (req, res) => {
     </div>
     <div style="height:14px"></div>
     <div class="nav">
-      <a href="/administracion" class="active">Dashboard</a>
-      <a href="/administracion/uploads">Uploads</a>
-      <a href="/administracion/kanban">Kanban</a>
+      <a href="${ADMIN_BASE_PATH}" class="active">Dashboard</a>
+      <a href="${ADMIN_BASE_PATH}/uploads">Uploads</a>
+      <a href="${ADMIN_BASE_PATH}/kanban">Kanban</a>
     </div>
   </aside>
   <main class="main">
@@ -268,9 +286,9 @@ app.get('/administracion-legacy/uploads', (req, res) => {
     </div>
     <div style="height:14px"></div>
     <div class="nav">
-      <a href="/administracion">Dashboard</a>
-      <a href="/administracion/uploads" class="active">Uploads</a>
-      <a href="/administracion/kanban">Kanban</a>
+      <a href="${ADMIN_BASE_PATH}">Dashboard</a>
+      <a href="${ADMIN_BASE_PATH}/uploads" class="active">Uploads</a>
+      <a href="${ADMIN_BASE_PATH}/kanban">Kanban</a>
     </div>
   </aside>
   <main class="main">
@@ -515,9 +533,9 @@ app.get('/administracion-legacy/kanban', (req, res) => {
     </div>
     <div style="height:14px"></div>
     <div class="nav">
-      <a href="/administracion">Dashboard</a>
-      <a href="/administracion/uploads">Uploads</a>
-      <a href="/administracion/kanban" class="active">Kanban</a>
+      <a href="${ADMIN_BASE_PATH}">Dashboard</a>
+      <a href="${ADMIN_BASE_PATH}/uploads">Uploads</a>
+      <a href="${ADMIN_BASE_PATH}/kanban" class="active">Kanban</a>
     </div>
   </aside>
 
