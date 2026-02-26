@@ -132,14 +132,13 @@ function SortableCard({ c, handle, onOpen, draggingOverlay = false }) {
 
   const due = c.due_at ? new Date(c.due_at).toLocaleString() : null
   const sub = c.section_name ? c.section_name : (c.project_name ? c.project_name : '—')
-  const borderColor = c.section_color ? c.section_color : null
 
   return (
     <div
       ref={setNodeRef}
       style={{
         ...style,
-        borderColor: borderColor ? borderColor : 'rgba(255,255,255,0.10)',
+        borderColor: 'var(--feego-border)',
       }}
       className={
         "relative rounded-2xl border bg-white/5 p-3 pb-14 cursor-pointer " +

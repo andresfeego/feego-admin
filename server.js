@@ -1107,10 +1107,20 @@ app.get('/api/kanban/state', requireAuth, async (req, res) => {
     for (const p of projects) pmap[p.id] = p.name;
 
     const smap = { };
-    for (const s of sections) smap[s.id] = { id: Number(s.id), project_id: Number(s.project_id), name: s.name, color: s.color, icon: s.icon, sort: s.sort };
+    const smapByProjectAndName = { };
+    const sectionKey = (projectId, sectionName) => `${Number(projectId) || 0}::${String(sectionName || '').trim().toLowerCase()}`;
+    for (const s of sections) {
+      const normalized = { id: Number(s.id), project_id: Number(s.project_id), name: s.name, color: s.color, icon: s.icon, sort: s.sort };
+      smap[s.id] = normalized;
+      smapByProjectAndName[sectionKey(s.project_id, s.name)] = normalized;
+    }
 
     const outCards = cards.map(c => {
-      const sec = c.section_id ? smap[c.section_id] : null;
+      const secById = c.section_id ? smap[c.section_id] : null;
+      const secByName = (!secById && c.section_name)
+        ? smapByProjectAndName[sectionKey(c.project_id, c.section_name)]
+        : null;
+      const sec = secById || secByName || null;
       return {
         id: Number(c.id),
         title: c.title,
