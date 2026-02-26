@@ -1,5 +1,5 @@
 import React from 'react'
-import { useTheme } from 'next-themes'
+import { useTheme } from '../lib/theme-provider.jsx'
 
 function Card({ title, desc, children }) {
   return (
