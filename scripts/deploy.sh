@@ -25,7 +25,7 @@ npm run migrate --silent
 
 # Build UI (optional; cheap enough for now)
 echo "[deploy] build ui"
-( cd ui && npm ci --omit=dev && npm run build )
+( cd ui && npm ci && npm run build )
 
 echo "[deploy] restart service"
 systemctl restart "$SERVICE_NAME"
