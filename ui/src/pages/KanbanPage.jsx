@@ -35,9 +35,9 @@ const fieldLabelClass = 'text-[11px] uppercase tracking-wide text-slate-400'
 const fieldInputClass = 'mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2'
 const panelClass = 'rounded-xl border border-white/10 bg-black/20 p-3'
 const PRIORITY_OPTIONS = [
-  { value: 1, label: 'Alta' },
-  { value: 2, label: 'Media' },
-  { value: 3, label: 'Baja' },
+  { value: 1, label: 'Alta', icon: 'Flame' },
+  { value: 2, label: 'Media', icon: 'Sparkles' },
+  { value: 3, label: 'Baja', icon: 'Leaf' },
 ]
 
 function getPriorityMeta(priority) {
@@ -313,10 +313,10 @@ export default function KanbanPage() {
   const [cardEdit, setCardEdit] = React.useState({ id: 0, title: '', notes: '', project_id: null, section_id: null, section_ids: [], due_at: null, priority: null, labels: [] })
 
   const [newCardOpen, setNewCardOpen] = React.useState(false)
-  const [newCard, setNewCard] = React.useState({ title: '', notes: '', project_id: null, section_id: null, section_ids: [], priority: null })
+  const [newCard, setNewCard] = React.useState({ title: '', notes: '', project_id: null, section_id: null, section_ids: [], priority: 3 })
 
   function openNewCard(project_id = null) {
-    setNewCard({ title: '', notes: '', project_id, section_id: null, section_ids: [], priority: null })
+    setNewCard({ title: '', notes: '', project_id, section_id: null, section_ids: [], priority: 3, labels: [] })
     setNewCardOpen(true)
   }
 
@@ -970,10 +970,11 @@ export default function KanbanPage() {
                                 {PRIORITY_OPTIONS.map((opt) => (
                                   <DropdownMenu.Item
                                     key={opt.value}
-                                    className="px-3 py-2 text-sm rounded-lg hover:bg-white/10"
+                                    className="px-3 py-2 text-sm rounded-lg hover:bg-white/10 flex items-center gap-2"
                                     onSelect={(e) => { e.preventDefault(); setPriorityFilterByProject((m) => ({ ...m, [p.id]: opt.value })) }}
                                   >
-                                    {opt.label}
+                                    <IconByName name={opt.icon} className="w-4 h-4 shrink-0" />
+                                    <span>{opt.label}</span>
                                   </DropdownMenu.Item>
                                 ))}
                               </DropdownMenu.Content>
@@ -1060,6 +1061,10 @@ export default function KanbanPage() {
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
+                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                      <IconByName name={PRIORITY_OPTIONS.find((o) => o.value === Number(newCard.priority))?.icon} className="w-4 h-4" />
+                      <span>Por defecto: Baja</span>
+                    </div>
                   </div>
                   <div />
                 </div>
