@@ -961,6 +961,86 @@ app.get('/api/status', requireAuth, (req, res) => {
   res.json({ hostname: os.hostname(), uptime: Math.round(os.uptime() / 60) + 'm', mem: memStr, load });
 });
 
+// System overview (read-only)
+app.get('/api/system/overview', requireAuth, async (req, res) => {
+  try {
+    const { execSync } = require('child_process');
+
+    const now = new Date().toISOString();
+    const hostname = os.hostname();
+    const uptimeSec = os.uptime();
+    const load = os.loadavg();
+    const cpuCount = (os.cpus() || []).length;
+
+    const mem = { total: os.totalmem(), free: os.freemem() };
+
+    function sh(cmd) {
+      return execSync(cmd, { encoding: 'utf8' }).trim();
+    }
+
+    let disk = null;
+    try { disk = sh('df -h'); } catch (e) {}
+
+    const ifaces = os.networkInterfaces();
+    const net = Object.fromEntries(Object.entries(ifaces).map(([k, arr]) => [
+      k,
+      (arr || []).filter((x) => !x.internal).map((x) => ({ address: x.address, family: x.family, mac: x.mac }))
+    ]));
+
+    let publicIp = null;
+    try { publicIp = sh('curl -s https://api.ipify.org'); } catch (e) {}
+
+    let ports = null;
+    try {
+      ports = sh("ss -ltn | awk 'NR>1 {print $4}' | sed 's/.*://' | sort -n | uniq");
+    } catch (e) {}
+
+    const docker = { systemDf: null, stats: null, ps: null };
+    try { docker.systemDf = sh('docker system df'); } catch (e) {}
+    try { docker.stats = sh("docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.PIDs}}'"); } catch (e) {}
+    try { docker.ps = sh("docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'"); } catch (e) {}
+
+    const services = ['nginx.service', 'feego-admin.service', 'backend-sisproind.service', 'openclaw-gateway.service'];
+    const svc = [];
+    for (const name of services) {
+      let active = 'unknown';
+      try { active = sh('systemctl is-active ' + name + ' || true'); } catch (e) {}
+      svc.push({ name, active });
+    }
+
+    const certs = [];
+    try {
+      const list = sh('ls -1 /etc/letsencrypt/live 2>/dev/null || true');
+      const domains = list.split(/\n+/).filter(Boolean);
+      for (const d of domains) {
+        try {
+          const exp = sh('openssl x509 -enddate -noout -in /etc/letsencrypt/live/' + d + '/fullchain.pem | cut -d= -f2');
+          certs.push({ domain: d, notAfter: exp });
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    res.json({
+      ok: true,
+      now,
+      hostname,
+      uptimeSec,
+      cpuCount,
+      load,
+      mem,
+      publicIp,
+      net,
+      ports,
+      disk,
+      docker,
+      services: svc,
+      certs,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: (e && e.message) ? e.message : 'system_overview_failed' });
+  }
+});
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, UPLOAD_DIR),
