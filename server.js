@@ -1095,13 +1095,28 @@ app.get('/api/uploads/view', requireAuth, async (req, res) => {
 
 
 
+async function hasSectionIdsJsonColumn(conn) {
+  try {
+    const rows = await conn.query("SHOW COLUMNS FROM kb_cards LIKE 'section_ids_json'");
+    if (Array.isArray(rows) && rows.length > 0) return true;
+    // Auto-heal in local/dev: create the column if missing so multi-section persistence works.
+    await conn.query('ALTER TABLE kb_cards ADD COLUMN section_ids_json TEXT NULL');
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
 app.get('/api/kanban/state', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
+    const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
     const projects = await conn.query('SELECT id, name, sort, description, logo_path FROM kb_projects WHERE archived=0 ORDER BY sort ASC, id ASC');
     const sections = await conn.query('SELECT id, project_id, name, color, icon, sort FROM kb_sections WHERE archived=0 ORDER BY project_id ASC, sort ASC, id ASC');
-    const cards = await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC');
+    const cards = supportsSectionIdsJson
+      ? await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, section_ids_json, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC')
+      : await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC');
 
     const pmap = { };
     for (const p of projects) pmap[p.id] = p.name;
@@ -1116,11 +1131,36 @@ app.get('/api/kanban/state', requireAuth, async (req, res) => {
     }
 
     const outCards = cards.map(c => {
+      const parsedSectionIds = (() => {
+        try {
+          const arr = c.section_ids_json ? JSON.parse(c.section_ids_json) : [];
+          if (!Array.isArray(arr)) return [];
+          return arr.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0);
+        } catch {
+          return [];
+        }
+      })();
+      const sectionsResolvedByIds = parsedSectionIds.map((sid) => smap[sid]).filter(Boolean);
+      const sectionsResolvedByNames = (() => {
+        const raw = String(c.section_name || '').trim();
+        if (!raw) return [];
+        const names = raw.includes('||')
+          ? raw.split('||').map((n) => String(n || '').trim()).filter(Boolean)
+          : [];
+        return names
+          .map((name) => smapByProjectAndName[sectionKey(c.project_id, name)])
+          .filter(Boolean);
+      })();
       const secById = c.section_id ? smap[c.section_id] : null;
       const secByName = (!secById && c.section_name)
         ? smapByProjectAndName[sectionKey(c.project_id, c.section_name)]
         : null;
       const sec = secById || secByName || null;
+      const cardSections = sectionsResolvedByIds.length > 0
+        ? sectionsResolvedByIds
+        : (sectionsResolvedByNames.length > 0
+          ? sectionsResolvedByNames
+          : (sec ? [sec] : []));
       return {
         id: Number(c.id),
         title: c.title,
@@ -1131,10 +1171,12 @@ app.get('/api/kanban/state', requireAuth, async (req, res) => {
         status: c.status,
         sort: c.sort,
         due_at: c.due_at ? new Date(c.due_at).toISOString() : null,
-        section_id: c.section_id ? Number(c.section_id) : null,
+        section_id: cardSections[0] ? Number(cardSections[0].id) : (c.section_id ? Number(c.section_id) : null),
         section_name: sec ? sec.name : (c.section_name || null),
         section_color: sec ? sec.color : null,
         section_icon: sec ? sec.icon : null,
+        section_ids: cardSections.map((s) => Number(s.id)),
+        sections: cardSections.map((s) => ({ id: Number(s.id), name: s.name, color: s.color, icon: s.icon })),
         priority: c.priority == null ? null : Number(c.priority),
         labels: (() => { try { return c.labels_json ? JSON.parse(c.labels_json) : []; } catch { return []; } })(),
       };
@@ -1147,6 +1189,7 @@ app.get('/api/kanban/state', requireAuth, async (req, res) => {
       cards: outCards,
     });
   } catch (e) {
+    console.error('kanban/state error', e);
     res.status(500).json({ ok: false });
   } finally {
     if (conn) conn.release();
@@ -1340,16 +1383,67 @@ app.delete('/api/kanban/project', requireAuth, async (req, res) => {
   }
 });
 
+app.delete('/api/kanban/project/permanent', requireAuth, async (req, res) => {
+  const id = Number((req.query && req.query.id) || 0);
+  if (!id) return res.status(400).json({ ok: false });
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    await conn.query('DELETE FROM kb_cards WHERE project_id=?', [id]);
+    await conn.query('DELETE FROM kb_sections WHERE project_id=?', [id]);
+    await conn.query('DELETE FROM kb_projects WHERE id=?', [id]);
+    await conn.commit();
+    res.json({ ok: true });
+  } catch (e) {
+    try { if (conn) await conn.rollback(); } catch {}
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 app.post('/api/kanban/card', requireAuth, async (req, res) => {
   const title = String((req.body && req.body.title) || '').trim();
   const project_id = Number((req.body && req.body.project_id) || 0) || null;
   const board = String((req.body && req.body.board) || 'ideas');
   const status = String((req.body && req.body.status) || 'n/a');
+  const section_ids_raw = Array.isArray(req.body && req.body.section_ids) ? req.body.section_ids : [];
+  const section_id_raw = (req.body && req.body.section_id != null) ? Number(req.body.section_id) : null;
+  const section_ids = Array.from(new Set(
+    [
+      ...section_ids_raw.map((x) => Number(x)),
+      ...(section_id_raw ? [section_id_raw] : []),
+    ].filter((x) => Number.isInteger(x) && x > 0)
+  ));
   if (!title) return res.status(400).json({ ok: false });
   let conn;
   try {
     conn = await pool.getConnection();
-    await conn.query('INSERT INTO kb_cards (title, project_id, board, status, sort) VALUES (?,?,?,?,9999)', [title, project_id, board, status]);
+    const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
+    let sectionRows = [];
+    if (section_ids.length > 0) {
+      sectionRows = await conn.query(`SELECT id, project_id, name FROM kb_sections WHERE archived=0 AND id IN (${section_ids.map(() => '?').join(',')})`, section_ids);
+      const validIds = new Set((sectionRows || []).filter((r) => Number(r.project_id) === Number(project_id)).map((r) => Number(r.id)));
+      if (validIds.size !== section_ids.length) {
+        return res.status(400).json({ ok: false, error: 'section_project_mismatch' });
+      }
+    }
+    const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
+    if (supportsSectionIdsJson) {
+      await conn.query(
+        'INSERT INTO kb_cards (title, project_id, board, status, sort, section_id, section_ids_json) VALUES (?,?,?,?,9999,?,?)',
+        [title, project_id, board, status, primarySectionId, JSON.stringify(section_ids)]
+      );
+    } else {
+      const namesById = new Map((sectionRows || []).map((r) => [Number(r.id), String(r.name || '')]));
+      const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
+      const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
+      await conn.query(
+        'INSERT INTO kb_cards (title, project_id, board, status, sort, section_id, section_name) VALUES (?,?,?,?,9999,?,?)',
+        [title, project_id, board, status, primarySectionId, sectionNameSerialized]
+      );
+    }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
@@ -1369,11 +1463,17 @@ app.post('/api/kanban/move', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
+    const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
     const fields = ['board=?', 'status=?'];
     const params = [board, status];
     if (project_id !== undefined) { fields.push('project_id=?'); params.push(project_id || null); }
     // when moving between projects, section may become invalid -> clear
-    if (project_id !== undefined) { fields.push('section_id=?'); params.push(null); }
+    if (project_id !== undefined) {
+      fields.push('section_id=?'); params.push(null);
+      if (supportsSectionIdsJson) {
+        fields.push('section_ids_json=?'); params.push('[]');
+      }
+    }
     if (sort !== undefined) { fields.push('sort=?'); params.push(sort); }
     params.push(id);
     await conn.query('UPDATE kb_cards SET ' + fields.join(', ') + ' WHERE id=?', params);
@@ -1392,6 +1492,13 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
   const notes = String((req.body && req.body.notes) || '');
   const project_id = (req.body && req.body.project_id != null) ? Number(req.body.project_id) : null;
   const section_id = (req.body && req.body.section_id != null) ? Number(req.body.section_id) : null;
+  const section_ids_raw = Array.isArray(req.body && req.body.section_ids) ? req.body.section_ids : [];
+  const section_ids = Array.from(new Set(
+    [
+      ...section_ids_raw.map((x) => Number(x)),
+      ...(section_id ? [section_id] : []),
+    ].filter((x) => Number.isInteger(x) && x > 0)
+  ));
   const due_at_raw = (req.body && req.body.due_at) ? String(req.body.due_at) : null; // UI sends ISO
   const due_at = (() => {
     if (!due_at_raw) return null;
@@ -1409,23 +1516,52 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    // validate section belongs to project (if provided)
-    if (section_id) {
-      const rows = await conn.query('SELECT project_id FROM kb_sections WHERE id=? AND archived=0', [section_id]);
-      if (!rows[0] || Number(rows[0].project_id) !== Number(project_id)) {
+    const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
+    let sectionRows = [];
+    // validate sections belong to project (if provided)
+    if (section_ids.length > 0) {
+      sectionRows = await conn.query(`SELECT id, project_id, name FROM kb_sections WHERE archived=0 AND id IN (${section_ids.map(() => '?').join(',')})`, section_ids);
+      const validIds = new Set((sectionRows || []).filter((r) => Number(r.project_id) === Number(project_id)).map((r) => Number(r.id)));
+      if (validIds.size !== section_ids.length) {
         return res.status(400).json({ ok: false, error: 'section_project_mismatch' });
       }
     }
 
     const labels_json = JSON.stringify(Array.isArray(labels) ? labels : []);
-    await conn.query(
-      'UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, due_at=?, priority=?, labels_json=? WHERE id=?',
-      [title, notes, project_id, section_id || null, due_at, priority, labels_json, id]
-    );
+    const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
+    if (supportsSectionIdsJson) {
+      await conn.query(
+        'UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_ids_json=?, due_at=?, priority=?, labels_json=? WHERE id=?',
+        [title, notes, project_id, primarySectionId, JSON.stringify(section_ids), due_at, priority, labels_json, id]
+      );
+    } else {
+      const namesById = new Map((sectionRows || []).map((r) => [Number(r.id), String(r.name || '')]));
+      const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
+      const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
+      await conn.query(
+        'UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_name=?, due_at=?, priority=?, labels_json=? WHERE id=?',
+        [title, notes, project_id, primarySectionId, sectionNameSerialized, due_at, priority, labels_json, id]
+      );
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('kanban/card/update error', e);
     res.status(500).json({ ok: false, error: 'server_error' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.delete('/api/kanban/card', requireAuth, async (req, res) => {
+  const id = Number((req.query && req.query.id) || 0);
+  if (!id) return res.status(400).json({ ok: false });
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.query('DELETE FROM kb_cards WHERE id=?', [id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false });
   } finally {
     if (conn) conn.release();
   }
@@ -1458,8 +1594,12 @@ app.post('/api/kanban/sections', requireAuth, async (req, res) => {
     conn = await pool.getConnection();
     await conn.query('INSERT INTO kb_sections (project_id, name, color, icon, sort) VALUES (?,?,?,?,9999)', [project_id, name, color, icon]);
     res.json({ ok: true });
-  } catch {
-    res.status(500).json({ ok: false });
+  } catch (e) {
+    if (e && e.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ ok: false, error: 'duplicate_section_name' });
+    }
+    console.error('kanban/sections create error', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
   } finally {
     if (conn) conn.release();
   }
@@ -1474,10 +1614,15 @@ app.post('/api/kanban/sections/update', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    await conn.query('UPDATE kb_sections SET name=?, color=?, icon=? WHERE id=? AND archived=0', [name, color, icon, id]);
+    const result = await conn.query('UPDATE kb_sections SET name=?, color=?, icon=? WHERE id=? AND archived=0', [name, color, icon, id]);
+    if (!result || !result.affectedRows) return res.status(404).json({ ok: false, error: 'section_not_found' });
     res.json({ ok: true });
-  } catch {
-    res.status(500).json({ ok: false });
+  } catch (e) {
+    if (e && e.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ ok: false, error: 'duplicate_section_name' });
+    }
+    console.error('kanban/sections update error', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
   } finally {
     if (conn) conn.release();
   }
@@ -1489,8 +1634,24 @@ app.post('/api/kanban/sections/delete', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
+    const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
     await conn.query('UPDATE kb_sections SET archived=1 WHERE id=?', [id]);
     await conn.query('UPDATE kb_cards SET section_id=NULL WHERE section_id=?', [id]);
+    if (supportsSectionIdsJson) {
+      const cardsWithSections = await conn.query('SELECT id, section_ids_json FROM kb_cards WHERE section_ids_json IS NOT NULL AND section_ids_json <> \'\'');
+      for (const card of cardsWithSections) {
+        let arr = [];
+        try {
+          arr = Array.isArray(card.section_ids_json) ? card.section_ids_json : JSON.parse(card.section_ids_json || '[]');
+        } catch {
+          arr = [];
+        }
+        const next = (Array.isArray(arr) ? arr : [])
+          .map((x) => Number(x))
+          .filter((x) => Number.isInteger(x) && x > 0 && x !== id);
+        await conn.query('UPDATE kb_cards SET section_ids_json=? WHERE id=?', [JSON.stringify(next), Number(card.id)]);
+      }
+    }
     res.json({ ok: true });
   } catch {
     res.status(500).json({ ok: false });

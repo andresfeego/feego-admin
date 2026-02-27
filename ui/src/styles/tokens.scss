@@ -1,0 +1,99 @@
+// Color matrix (single source of truth)
+// Use in modules via: @use '../styles/tokens' as t;
+
+// Brand scale
+$primary-500: #3b82f6;
+$primary-600: #2563eb;
+$secondary-600: #4f46e5;
+$accent-500: #22c55e;
+$danger-500: #ef4444;
+$danger-600: #dc2626;
+
+// Neutral scale
+$ink-900: #0f172a;
+$ink-950: #020617;
+$slate-50: #f8fafc;
+$slate-100: #f1f5f9;
+
+// Semantic CSS vars for app-wide use
+:root {
+  --color-primary: #{$primary-500};
+  --color-primary-strong: #{$primary-600};
+  --color-secondary: #{$secondary-600};
+  --color-accent: #{$accent-500};
+  --color-danger: #{$danger-500};
+  --color-danger-strong: #{$danger-600};
+  --on-primary: #fff;
+  --primary-surface: #{rgba($primary-500, 0.15)};
+  --primary-surface-hover: #{rgba($primary-500, 0.22)};
+  --primary-border: #{rgba($primary-500, 0.30)};
+  --danger-surface: #{rgba($danger-500, 0.14)};
+  --danger-surface-hover: #{rgba($danger-500, 0.22)};
+  --danger-border: #{rgba($danger-500, 0.30)};
+}
+
+html[data-theme="light"] {
+  --surface-page: #eef1f5;
+  --surface-page-gradient: linear-gradient(180deg, #eef1f5 0%, #eef1f5 100%);
+  --surface-card: rgba(248, 250, 252, 0.85);
+  --surface-card-solid: #{$slate-50};
+  --surface-overlay: rgba(248, 250, 252, 0.92);
+  --surface-overlay-soft: rgba(255, 255, 255, 0.75);
+  --surface-overlay-mid: rgba(255, 255, 255, 0.82);
+  --surface-overlay-strong: rgba(248, 250, 252, 0.95);
+  --surface-overlay-stronger: rgba(248, 250, 252, 0.97);
+  --surface-header-accent: #eef2ff;
+
+  --text-main: #{$ink-900};
+  --text-muted-1: rgba(15, 23, 42, 0.82);
+  --text-muted-2: rgba(15, 23, 42, 0.72);
+  --text-muted-3: rgba(15, 23, 42, 0.60);
+
+  --border-soft: rgba(15, 23, 42, 0.12);
+  --border-softer: rgba(15, 23, 42, 0.10);
+
+  --active-bg: var(--primary-surface);
+  --active-border: var(--primary-border);
+  --focus-ring: #{rgba($primary-500, 0.15)};
+  --focus-border: #{rgba($primary-500, 0.35)};
+
+  --hover-soft: rgba(255, 255, 255, 0.06);
+  --hover-subtle: rgba(2, 6, 23, 0.04);
+  --overlay-backdrop: rgba(2, 6, 23, 0.35);
+  --modal-bg: rgba(248, 250, 252, 0.95);
+  --modal-border: var(--border-soft);
+  --shadow-card: 0 14px 40px rgba(2, 6, 23, 0.08);
+}
+
+html[data-theme="dark"] {
+  --surface-page: #070a12;
+  --surface-page-gradient: radial-gradient(circle at 20% 10%, #1b2a4a 0%, #0b1020 40%, #070a12 100%);
+  --surface-card: rgba(255, 255, 255, 0.06);
+  --surface-card-solid: rgba(2, 6, 23, 0.92);
+  --surface-overlay: rgba(2, 6, 23, 0.92);
+  --surface-overlay-soft: rgba(255, 255, 255, 0.06);
+  --surface-overlay-mid: rgba(255, 255, 255, 0.10);
+  --surface-overlay-strong: rgba(2, 6, 23, 0.92);
+  --surface-overlay-stronger: rgba(2, 6, 23, 0.95);
+  --surface-header-accent: #12203a;
+
+  --text-main: #e5e7eb;
+  --text-muted-1: rgba(226, 232, 240, 0.82);
+  --text-muted-2: rgba(226, 232, 240, 0.72);
+  --text-muted-3: rgba(226, 232, 240, 0.60);
+
+  --border-soft: rgba(255, 255, 255, 0.10);
+  --border-softer: rgba(255, 255, 255, 0.10);
+
+  --active-bg: var(--primary-surface);
+  --active-border: var(--primary-border);
+  --focus-ring: #{rgba($primary-500, 0.20)};
+  --focus-border: #{rgba($primary-500, 0.40)};
+
+  --hover-soft: rgba(255, 255, 255, 0.06);
+  --hover-subtle: rgba(255, 255, 255, 0.10);
+  --overlay-backdrop: rgba(0, 0, 0, 0.60);
+  --modal-bg: rgba(2, 6, 23, 0.92);
+  --modal-border: rgba(255, 255, 255, 0.10);
+  --shadow-card: 0 22px 60px rgba(0, 0, 0, 0.45);
+}

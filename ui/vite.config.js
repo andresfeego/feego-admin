@@ -1,19 +1,25 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
-export default defineConfig({
-  base: '/administracion/',
-  plugins: [react()],
-  server: {
-    // Dev convenience: route API calls to the backend server.
-    // UI dev server runs on :3040; backend usually on :3030.
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:3030',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
-  },
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const devApiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:3030'
+
+  return {
+    base: '/administracion/',
+    plugins: [react()],
+    // Only used by `vite dev` (local UI + backend split).
+    server: command === 'serve'
+      ? {
+          proxy: {
+            '/api': {
+              target: devApiTarget,
+              changeOrigin: true,
+              secure: false,
+            },
+          },
+        }
+      : undefined,
+  }
 })

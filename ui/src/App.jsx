@@ -1,5 +1,6 @@
 import React from 'react'
 import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import RequireAuth from './components/RequireAuth.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -13,7 +14,7 @@ import SettingsPage from './pages/SettingsPage.jsx'
 function Sidebar() {
   const loc = useLocation()
   const { user, logout } = useAuth()
-  const active = (p) => (loc.pathname === p ? 'bg-blue-500/15 border-blue-500/30' : 'border-transparent')
+  const active = (p) => (loc.pathname === p ? 'feego-nav-active' : 'border-transparent')
 
   return (
     <aside className="feego-sidebar w-64 shrink-0 border-r border-white/10 bg-white/5 backdrop-blur-xl p-4 hidden md:block">
@@ -135,6 +136,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Layout />
+      <Toaster position="bottom-center" />
     </AuthProvider>
   )
 }

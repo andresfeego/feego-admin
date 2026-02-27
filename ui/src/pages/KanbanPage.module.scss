@@ -1,0 +1,31 @@
+@use "../styles/tokens" as t;
+
+.ideasCornerAction {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-top-left-radius: 1rem;
+  border: 1px solid var(--primary-border);
+  background: var(--primary-surface);
+  color: t.$primary-600;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 120ms ease;
+}
+
+.ideasCornerAction:hover {
+  background: var(--primary-surface-hover);
+}
+
+.dangerAction {
+  border: 1px solid var(--danger-border);
+  background: var(--danger-surface);
+  color: var(--color-danger-strong);
+}
+
+.dangerAction:hover {
+  background: var(--danger-surface-hover);
+}
