@@ -16,7 +16,7 @@ export default function UploadsPage() {
   const [loading, setLoading] = React.useState(true)
 
   const inputRef = React.useRef(null)
-  const [queue, setQueue] = React.useState([]) // [{id,name,size,progress,status,error,selected}]
+  const [queue, setQueue] = React.useState([]) // [{id,name,size,progress,status,error}]
   const [uploading, setUploading] = React.useState(false)
 
   async function refresh() {
@@ -55,7 +55,6 @@ export default function UploadsPage() {
         progress: 0,
         status: 'queued', // queued|uploading|done|error
         error: null,
-        selected: false,
       })),
     ])
   }
@@ -128,21 +127,9 @@ export default function UploadsPage() {
     setQueue((q) => q.filter((x) => x.status !== 'done'))
   }
 
-  function toggleSelected(id) {
-    setQueue((q) => q.map((x) => (x.id === id ? { ...x, selected: !x.selected } : x)))
-  }
-
-  function removeSelected() {
+  function removeFromQueue(id) {
     if (uploading) return
-    setQueue((q) => q.filter((x) => !x.selected))
-  }
-
-  function selectAllVisible() {
-    setQueue((q) => q.map((x) => ({ ...x, selected: true })))
-  }
-
-  function clearSelection() {
-    setQueue((q) => q.map((x) => ({ ...x, selected: false })))
+    setQueue((q) => q.filter((x) => x.id !== id))
   }
 
   return (
@@ -173,14 +160,6 @@ export default function UploadsPage() {
             <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={() => inputRef.current && inputRef.current.click()}>
               Seleccionar
             </button>
-            <button
-              className={`px-3 py-2 rounded-lg border ${uploading ? 'border-white/10 bg-white/5 opacity-60' : 'border-red-500/30 bg-red-500/10 hover:bg-red-500/15 text-red-200'}`}
-              disabled={uploading}
-              onClick={removeSelected}
-              title={uploading ? 'No disponible mientras sube' : 'Quitar de la cola los archivos seleccionados'}
-            >
-              Eliminar seleccionados
-            </button>
             <button className={`px-3 py-2 rounded-lg font-bold ${uploading ? 'bg-blue-600/50' : 'bg-blue-600 hover:bg-blue-500'}`} disabled={uploading} onClick={startUpload}>
               {uploading ? 'Subiendo…' : 'Subir'}
             </button>
@@ -192,30 +171,22 @@ export default function UploadsPage() {
 
         {queue.length > 0 && (
           <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
-              <div className="text-slate-400">Seleccionados: <span className="text-slate-200 font-semibold">{queue.filter((x) => x.selected).length}</span> / {queue.length}</div>
-              <div className="flex gap-2 flex-wrap">
-                <button className="px-2 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={selectAllVisible} disabled={uploading}>Seleccionar todo</button>
-                <button className="px-2 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={clearSelection} disabled={uploading}>Quitar selección</button>
-              </div>
-            </div>
-
             {queue.slice(-20).map((q) => (
-              <div key={q.id} className={`rounded-xl border p-3 ${q.selected ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-white/10 bg-black/20'}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <label className="flex items-center gap-3 min-w-0">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4"
-                      checked={!!q.selected}
-                      disabled={uploading || q.status === 'uploading'}
-                      onChange={() => toggleSelected(q.id)}
-                    />
-                    <div className="min-w-0">
-                      <div className="font-semibold truncate">{q.name}</div>
-                      <div className="text-xs text-slate-400">{humanSize(q.size)} · {q.status}{q.error ? ` · ${q.error}` : ''}</div>
-                    </div>
-                  </label>
+              <div key={q.id} className="rounded-xl border border-white/10 bg-black/20 p-3 relative">
+                <button
+                  className={`absolute top-2 right-2 w-7 h-7 rounded-lg border ${uploading || q.status === 'uploading' ? 'border-white/10 bg-white/5 opacity-60 cursor-not-allowed' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}
+                  title={uploading || q.status === 'uploading' ? 'No disponible mientras sube' : 'Quitar de la cola'}
+                  disabled={uploading || q.status === 'uploading'}
+                  onClick={() => removeFromQueue(q.id)}
+                >
+                  ✕
+                </button>
+
+                <div className="flex items-center justify-between gap-3 pr-10">
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{q.name}</div>
+                    <div className="text-xs text-slate-400">{humanSize(q.size)} · {q.status}{q.error ? ` · ${q.error}` : ''}</div>
+                  </div>
                   <div className="text-xs text-slate-300 w-10 text-right">{q.progress}%</div>
                 </div>
                 <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
