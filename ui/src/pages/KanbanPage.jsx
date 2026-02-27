@@ -952,10 +952,11 @@ export default function KanbanPage() {
                                   .map((sec) => (
                                     <DropdownMenu.Item
                                       key={sec.id}
-                                      className="px-3 py-2 text-sm rounded-lg hover:bg-white/10"
+                                      className="px-3 py-2 text-sm rounded-lg hover:bg-white/10 flex items-center gap-2"
                                       onSelect={(e) => { e.preventDefault(); setSectionFilterByProject((m) => ({ ...m, [p.id]: sec.name })) }}
                                     >
-                                      {sec.name}
+                                      <IconByName name={sec.icon} className="w-4 h-4 shrink-0" style={{ color: sec.color || undefined }} />
+                                      <span className="truncate">{sec.name}</span>
                                     </DropdownMenu.Item>
                                   ))}
                                 <div className="h-px bg-white/10 my-1" />
