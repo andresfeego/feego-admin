@@ -182,3 +182,42 @@ html[data-theme="light"] .feego-modal{
     transform: translateY(8px) scale(0.96);
   }
 }
+
+@keyframes upload-queue-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.upload-queue-item {
+  animation: upload-queue-enter 200ms ease-out both;
+}
+
+@keyframes upload-queue-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.upload-queue-item--leaving {
+  animation: upload-queue-exit 300ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-queue-item {
+    animation: none !important;
+  }
+  .upload-queue-item--leaving {
+    animation: none !important;
+  }
+}

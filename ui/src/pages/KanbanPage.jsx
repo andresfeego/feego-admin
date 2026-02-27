@@ -149,9 +149,9 @@ function DroppableColumn({ id, header, children, className = '', fluid = false }
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
     <div className={`${fluid ? 'min-w-0 flex-1' : 'w-72 shrink-0'} ${className}`}>
-      <div className={`rounded-2xl border p-3 min-h-[60vh] ${isOver ? 'border-blue-400/50 bg-blue-500/10' : 'border-white/10 bg-black/20'}`}>
+      <div className={`rounded-2xl border p-4 min-h-[60vh] ${isOver ? 'border-blue-400/50 bg-blue-500/10' : 'border-white/10 bg-black/20'}`}>
         {header}
-        <div ref={setNodeRef} className="mt-3 space-y-2 min-h-[40vh]">
+        <div ref={setNodeRef} className="mt-4 space-y-2 min-h-[40vh]">
           {children}
         </div>
       </div>
@@ -178,7 +178,11 @@ function CardVisual({ c, handle, onOpen, draggingOverlay = false, style = {}, se
         borderColor: 'var(--feego-border)',
       }}
       className={
-        "relative overflow-hidden rounded-2xl border bg-white/5 p-3 pb-14 cursor-pointer " +
+        `relative overflow-hidden rounded-2xl border p-4 pb-14 cursor-pointer transition-all duration-200 ease-out ${
+          c.board === 'kanban'
+            ? 'bg-white/10 shadow-sm hover:shadow-lg'
+            : 'bg-white/5'
+        } ` +
         (draggingOverlay ? 'shadow-2xl ring-2 ring-blue-400/40' : '')
       }
       onClick={() => onOpen(c)}
@@ -812,7 +816,7 @@ export default function KanbanPage() {
   return (
     <div className="space-y-4 -mx-4 md:-mx-6">
       {/* Header: arrows+title centered; buttons below */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-center gap-2 w-full overflow-hidden">
           <ArrowBtn onClick={() => setIdx((idx + boards.length - 1) % boards.length)}>‹</ArrowBtn>
           <div className="font-black text-lg text-center min-w-[140px]">{boards[idx].title}</div>
@@ -859,7 +863,7 @@ export default function KanbanPage() {
             onDragEnd={onDragEnd}
           >
             <div
-              className={`w-full max-w-full flex gap-3 overflow-y-hidden pb-6 ${viewKey === 'kanban' ? 'overflow-x-auto lg:overflow-x-hidden' : 'overflow-x-scroll'}`}
+              className={`w-full max-w-full flex gap-4 overflow-y-hidden pb-6 ${viewKey === 'kanban' ? 'overflow-x-auto lg:overflow-x-hidden' : 'overflow-x-scroll'}`}
               style={{
                 WebkitOverflowScrolling: 'touch',
                 overflowAnchor: 'none',
@@ -873,10 +877,22 @@ export default function KanbanPage() {
                 if (cid.startsWith('kanban:')) {
                   const st = cid.split(':')[1]
                   const title = st === 'todo' ? 'Por hacer' : st === 'doing' ? 'Haciendo' : 'Hecho'
+                  const tone = st === 'todo'
+                    ? 'border-blue-400/30 bg-blue-500/15 text-blue-200'
+                    : st === 'doing'
+                      ? 'border-amber-400/30 bg-amber-500/15 text-amber-200'
+                      : 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
                   header = (
-                    <div>
-                      <div className="font-extrabold">{title}</div>
-                      <div className="text-xs text-slate-400">{viewKey}</div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-semibold">{title}</div>
+                          <div className="text-xs text-slate-400">Kanban</div>
+                        </div>
+                        <span className={`px-2 py-2 min-w-8 text-center rounded-lg text-xs font-semibold border ${tone}`}>
+                          {cards.length}
+                        </span>
+                      </div>
                     </div>
                   )
                 } else {

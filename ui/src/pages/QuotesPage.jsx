@@ -57,59 +57,59 @@ function NewQuoteForm({ onCreated, onClose }) {
 
   return (
     <div>
-      <div className="text-lg font-black">Nueva cotización</div>
-      <div className="mt-1 text-xs text-slate-400">Crea la cotización y descarga el PDF.</div>
+      <div className="text-2xl leading-8 font-bold">Nueva cotización</div>
+      <div className="mt-2 text-sm leading-5 text-slate-400">Crea la cotización y descarga el PDF.</div>
 
-      {msg && <div className="mt-3 text-sm text-slate-200">{msg}</div>}
+      {msg && <div className="mt-4 text-sm text-slate-200">{msg}</div>}
 
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <div>
-          <div className="text-xs text-slate-400">Cotizado a</div>
-          <input value={customer} onChange={e=>setCustomer(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-xl bg-black/20 border border-white/10 text-white" placeholder="MOBA" />
+          <div className="text-sm leading-5 text-slate-400">Cotizado a</div>
+          <input value={customer} onChange={e=>setCustomer(e.target.value)} className="mt-2 w-full px-4 py-2 rounded-xl bg-black/20 border border-white/10 text-white" placeholder="MOBA" />
         </div>
         <div>
-          <div className="text-xs text-slate-400">Fecha</div>
-          <input value={date} onChange={e=>setDate(e.target.value)} type="date" className="mt-1 w-full px-3 py-2 rounded-xl bg-black/20 border border-white/10 text-white" />
+          <div className="text-sm leading-5 text-slate-400">Fecha</div>
+          <input value={date} onChange={e=>setDate(e.target.value)} type="date" className="mt-2 w-full px-4 py-2 rounded-xl bg-black/20 border border-white/10 text-white" />
         </div>
       </div>
 
       <div className="mt-4">
-        <div className="text-xs text-slate-400">Notas (opcional)</div>
-        <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} className="mt-1 w-full px-3 py-2 rounded-xl bg-black/20 border border-white/10 text-white" placeholder="Condiciones, garantía, etc." />
+        <div className="text-sm leading-5 text-slate-400">Notas (opcional)</div>
+        <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} className="mt-2 w-full px-4 py-2 rounded-xl bg-black/20 border border-white/10 text-white" placeholder="Condiciones, garantía, etc." />
       </div>
 
       <div className="mt-4">
         <div className="font-bold">Items</div>
-        <div className="mt-2 space-y-2">
+        <div className="mt-4 space-y-4">
           {items.map((it, i) => (
-            <div key={i} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div key={i} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <div className="text-xs text-slate-400">Producto</div>
-                  <input value={it.name} onChange={e=>setItem(i,{name:e.target.value})} className="mt-1 w-full px-3 py-2 rounded-xl bg-black/20 border border-white/10 text-white" />
+                  <div className="text-sm leading-5 text-slate-400">Producto</div>
+                  <input value={it.name} onChange={e=>setItem(i,{name:e.target.value})} className="mt-2 w-full px-4 py-2 rounded-xl bg-black/20 border border-white/10 text-white" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-400">URL imagen (opcional)</div>
-                  <input value={it.imageUrl} onChange={e=>setItem(i,{imageUrl:e.target.value})} className="mt-1 w-full px-3 py-2 rounded-xl bg-black/20 border border-white/10 text-white" placeholder="https://..." />
-                </div>
-              </div>
-
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <div>
-                  <div className="text-xs text-slate-400">Cantidad</div>
-                  <input value={it.qty} onChange={e=>setItem(i,{qty:e.target.value})} type="number" className="mt-1 w-full px-3 py-2 rounded-xl bg-black/20 border border-white/10 text-white" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-400">Valor unidad</div>
-                  <input value={it.unitPrice} onChange={e=>setItem(i,{unitPrice:e.target.value})} type="number" className="mt-1 w-full px-3 py-2 rounded-xl bg-black/20 border border-white/10 text-white" />
+                  <div className="text-sm leading-5 text-slate-400">URL imagen (opcional)</div>
+                  <input value={it.imageUrl} onChange={e=>setItem(i,{imageUrl:e.target.value})} className="mt-2 w-full px-4 py-2 rounded-xl bg-black/20 border border-white/10 text-white" placeholder="https://..." />
                 </div>
               </div>
 
-              <div className="mt-2 flex items-center justify-between">
-                <div className="text-xs text-slate-400">Subtotal: {(Number(it.qty||0)*Number(it.unitPrice||0)).toLocaleString('es-CO')}</div>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm leading-5 text-slate-400">Cantidad</div>
+                  <input value={it.qty} onChange={e=>setItem(i,{qty:e.target.value})} type="number" className="mt-2 w-full px-4 py-2 rounded-xl bg-black/20 border border-white/10 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm leading-5 text-slate-400">Valor unidad</div>
+                  <input value={it.unitPrice} onChange={e=>setItem(i,{unitPrice:e.target.value})} type="number" className="mt-2 w-full px-4 py-2 rounded-xl bg-black/20 border border-white/10 text-white" />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <div className="text-sm text-slate-400">Subtotal: {(Number(it.qty||0)*Number(it.unitPrice||0)).toLocaleString('es-CO')}</div>
                 <button
                   onClick={()=> setItems(prev => prev.filter((_,idx)=>idx!==i))}
-                  className="text-xs px-3 py-1 rounded-lg border border-white/10 hover:bg-white/5"
+                  className="text-sm px-4 py-2 rounded-lg border border-white/10 transition-all duration-200 ease-out hover:bg-white/5"
                   disabled={items.length===1}
                 >
                   Quitar
@@ -119,18 +119,18 @@ function NewQuoteForm({ onCreated, onClose }) {
           ))}
         </div>
 
-        <div className="mt-2 flex gap-2 items-center">
-          <button onClick={()=>setItems(prev=>[...prev,{name:'',qty:1,unitPrice:0,imageUrl:''}])} className="px-3 py-2 rounded-xl border border-white/10 hover:bg-white/5 text-sm font-bold">+ Agregar item</button>
-          <div className="ml-auto text-sm font-extrabold">TOTAL: {total.toLocaleString('es-CO')}</div>
+        <div className="mt-4 flex gap-4 items-center">
+          <button onClick={()=>setItems(prev=>[...prev,{name:'',qty:1,unitPrice:0,imageUrl:''}])} className="px-4 py-2 rounded-xl border border-white/10 transition-all duration-200 ease-out hover:bg-white/5 text-sm font-bold">+ Agregar item</button>
+          <div className="ml-auto text-base leading-6 font-bold">TOTAL: {total.toLocaleString('es-CO')}</div>
         </div>
       </div>
 
-      <div className="mt-5 flex gap-2 justify-end">
-        <button onClick={onClose} className="px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 text-sm font-extrabold">Cancelar</button>
+      <div className="mt-6 flex gap-4 justify-end">
+        <button onClick={onClose} className="px-4 py-2 rounded-xl border border-white/10 transition-all duration-200 ease-out hover:bg-white/5 text-sm font-bold">Cancelar</button>
         <button
           onClick={create}
           disabled={busy}
-          className={cls('px-4 py-2 rounded-xl font-extrabold text-sm', busy ? 'bg-slate-700 text-slate-300' : 'bg-indigo-500 hover:bg-indigo-400 text-white')}
+          className={cls('px-4 py-2 rounded-xl font-bold text-sm transition-all duration-200 ease-out', busy ? 'bg-slate-700 text-slate-300' : 'bg-indigo-500 hover:bg-indigo-400 text-white')}
         >
           {busy ? 'Generando…' : 'Crear + PDF'}
         </button>
@@ -160,17 +160,17 @@ export default function QuotesPage() {
   React.useEffect(()=>{ refresh().catch(()=>{}) },[])
 
   return (
-    <div className="p-4">
+    <div className="px-4 md:px-6 lg:px-8 2xl:px-12 py-4 md:py-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div className="flex items-end justify-between gap-4 md:gap-6 flex-wrap">
           <div>
-            <div className="text-2xl font-black">Cotizaciones</div>
-            <div className="text-sm text-slate-400">Lista + Nueva cotización (modal) + PDF.</div>
+            <div className="text-[32px] leading-[40px] font-bold">Cotizaciones</div>
+            <div className="text-sm leading-5 text-slate-400">Lista + Nueva cotización (modal) + PDF.</div>
           </div>
 
           <Dialog.Root open={open} onOpenChange={setOpen}>
             <Dialog.Trigger asChild>
-              <button className="px-4 py-2 rounded-xl font-extrabold text-sm bg-indigo-500 hover:bg-indigo-400 text-white">
+              <button className="px-4 py-2 rounded-xl font-bold text-sm bg-indigo-500 hover:bg-indigo-400 text-white transition-all duration-200 ease-out">
                 + Nueva cotización
               </button>
             </Dialog.Trigger>
@@ -187,19 +187,19 @@ export default function QuotesPage() {
           </Dialog.Root>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="font-bold">Cotizaciones recientes</div>
-          <div className="mt-2 text-xs text-slate-400">Descarga PDF con un clic.</div>
-          <div className="mt-3 space-y-2">
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 md:p-6">
+          <div className="text-xl leading-8 font-bold">Cotizaciones recientes</div>
+          <div className="mt-2 text-sm leading-5 text-slate-400">Descarga PDF con un clic.</div>
+          <div className="mt-4 space-y-4">
             {list.map(q => (
-              <div key={q.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                <div className="flex items-start justify-between gap-3">
+              <div key={q.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="font-extrabold">{q.customer}</div>
-                    <div className="text-xs text-slate-400">{q.date || q.createdAt?.slice(0,10)} • {q.items?.length || 0} items</div>
+                    <div className="text-xl leading-8 font-bold">{q.customer}</div>
+                    <div className="text-sm leading-5 text-slate-400">{q.date || q.createdAt?.slice(0,10)} • {q.items?.length || 0} items</div>
                   </div>
                   <a
-                    className="px-3 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-extrabold"
+                    className="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-bold transition-all duration-200 ease-out"
                     href={`/api/quotes/${q.id}/pdf`}
                     target="_blank"
                     rel="noreferrer"
@@ -209,7 +209,7 @@ export default function QuotesPage() {
                 </div>
               </div>
             ))}
-            {!list.length && <div className="text-sm text-slate-400">Aún no hay cotizaciones.</div>}
+            {!list.length && <div className="text-sm leading-5 text-slate-400">Aún no hay cotizaciones.</div>}
           </div>
         </div>
       </div>

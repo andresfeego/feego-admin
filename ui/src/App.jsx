@@ -89,7 +89,7 @@ function Layout() {
       <MobileHeader />
       <div className="flex min-h-screen md:pt-0 pt-14">
         <Sidebar />
-        <main className="flex-1 p-4 md:p-6 max-w-full overflow-x-hidden">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 2xl:p-12 max-w-full overflow-x-hidden">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
