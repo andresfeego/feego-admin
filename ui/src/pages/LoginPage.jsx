@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [username, setUsername] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [msg, setMsg] = React.useState('')
+  const formRef = React.useRef(null)
 
   React.useEffect(() => {
     if (user) nav(from, { replace: true })
@@ -23,6 +24,12 @@ export default function LoginPage() {
     setMsg('')
     const r = await login(username.trim(), password)
     if (!r.ok) setMsg('Usuario o clave incorrectos')
+  }
+
+  function onEnterSubmit(e) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    formRef.current?.requestSubmit()
   }
 
   return (
@@ -40,9 +47,20 @@ export default function LoginPage() {
           <div className="text-xl font-black text-center">Iniciar sesión</div>
           <div className="text-xs feego-muted mt-1 text-center">Feego Admin</div>
 
-          <form onSubmit={onSubmit} className="mt-4 space-y-3">
-            <Input placeholder="Usuario" value={username} onChange={(e) => setUsername(e.target.value)} />
-            <Input placeholder="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <form ref={formRef} onSubmit={onSubmit} className="mt-4 space-y-3">
+            <Input
+              placeholder="Usuario"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onKeyDown={onEnterSubmit}
+            />
+            <Input
+              placeholder="Contraseña"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={onEnterSubmit}
+            />
             {msg && <div className="text-sm text-red-600">{msg}</div>}
             <Button className="w-full" type="submit">Entrar</Button>
           </form>

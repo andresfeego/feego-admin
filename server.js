@@ -895,6 +895,7 @@ app.post('/api/quotes', requireAuth, async (req, res) => {
     const customer = String(body.customer || '').trim();
     const date = String(body.date || '').trim();
     const notes = String(body.notes || '').trim();
+    const totalize = body.totalize !== false;
     const items = Array.isArray(body.items) ? body.items : [];
     if (!customer) return res.status(400).json({ ok: false, error: 'missing_customer' });
 
@@ -916,7 +917,7 @@ app.post('/api/quotes', requireAuth, async (req, res) => {
 
     const id = crypto.randomBytes(8).toString('hex');
     const createdAt = new Date().toISOString();
-    const quote = { id, customer, date, notes, items: cleanedItems, createdAt, createdBy: req.session.username || 'unknown' };
+    const quote = { id, customer, date, notes, totalize, items: cleanedItems, createdAt, createdBy: req.session.username || 'unknown' };
 
     const list = await readQuotes();
     list.unshift(quote);
@@ -943,6 +944,7 @@ app.put('/api/quotes/:id', requireAuth, async (req, res) => {
     const customer = String(body.customer || '').trim();
     const date = String(body.date || '').trim();
     const notes = String(body.notes || '').trim();
+    const totalize = body.totalize !== false;
     const items = Array.isArray(body.items) ? body.items : [];
     if (!customer) return res.status(400).json({ ok: false, error: 'missing_customer' });
 
@@ -972,6 +974,7 @@ app.put('/api/quotes/:id', requireAuth, async (req, res) => {
       customer,
       date,
       notes,
+      totalize,
       items: cleanedItems,
       updatedAt: new Date().toISOString(),
       updatedBy: req.session.username || 'unknown',
@@ -1144,6 +1147,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
   y -= 24;
 
   let grand = 0;
+  const shouldTotalize = q.totalize !== false;
   const rows = (q.items || []).slice(0, 35);
   for (let idx = 0; idx < rows.length; idx += 1) {
     const it = rows[idx];
@@ -1166,7 +1170,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
   page.drawRectangle({ x: width - margin - 250, y: y - 52, width: 250, height: 52, color: rgb(0.97, 0.98, 1) });
   page.drawRectangle({ x: width - margin - 250, y: y - 52, width: 250, height: 52, borderColor: rgb(0.88, 0.9, 0.95), borderWidth: 1 });
   page.drawText('TOTAL COTIZACION', { x: width - margin - 238, y: y - 20, size: 10, font: fontBold, color: rgb(0.28, 0.31, 0.38) });
-  page.drawText(grand.toLocaleString('es-CO'), { x: width - margin - 110, y: y - 38, size: 16, font: fontBold, color: accent });
+  page.drawText(shouldTotalize ? grand.toLocaleString('es-CO') : '-----', { x: width - margin - 110, y: y - 38, size: 16, font: fontBold, color: accent });
   y -= 70;
 
   if (q.notes) {

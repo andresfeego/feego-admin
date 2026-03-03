@@ -88,6 +88,15 @@ function Layout() {
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return undefined
+    const rawBasePath = import.meta.env.VITE_APP_BASE_PATH || import.meta.env.BASE_URL || '/'
+    const withLeadingSlash = rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`
+    const basePath = withLeadingSlash.replace(/\/+$/, '') || '/'
+    const loginPath = `${basePath === '/' ? '' : basePath}/login`
+    const normalizePath = (v) => {
+      const p = String(v || '').split('?')[0].replace(/\/+$/, '')
+      return p || '/'
+    }
+
     const origFetch = window.fetch.bind(window)
     window.fetch = async (...args) => {
       const res = await origFetch(...args)
@@ -96,9 +105,14 @@ function Layout() {
         const url = typeof input === 'string'
           ? input
           : (input && typeof input.url === 'string' ? input.url : '')
-        const isApi = url.startsWith('/api/') || url.includes('/api/')
-        if (res.status === 401 && isApi && window.location.pathname !== '/login') {
-          window.location.assign('/login')
+        const urlPath = (() => {
+          try { return new URL(url, window.location.origin).pathname } catch { return url }
+        })()
+        const isApi = urlPath.startsWith('/api/') || urlPath.includes('/api/')
+        const isLoginApi = normalizePath(urlPath).endsWith('/api/login')
+        const isOnLoginPage = normalizePath(window.location.pathname) === normalizePath(loginPath)
+        if (res.status === 401 && isApi && !isLoginApi && !isOnLoginPage) {
+          window.location.assign(loginPath)
         }
       } catch {}
       return res

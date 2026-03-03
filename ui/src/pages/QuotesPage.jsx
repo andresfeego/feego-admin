@@ -181,6 +181,7 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
   const [customer, setCustomer] = React.useState('')
   const [date, setDate] = React.useState(new Date().toISOString().slice(0,10))
   const [notes, setNotes] = React.useState('')
+  const [totalize, setTotalize] = React.useState(true)
   const [items, setItems] = React.useState([makeEmptyItem()])
   const [busy, setBusy] = React.useState(false)
   const [msg, setMsg] = React.useState('')
@@ -201,12 +202,14 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
       setCustomer('')
       setDate(new Date().toISOString().slice(0,10))
       setNotes('')
+      setTotalize(true)
       setItems([makeEmptyItem()])
       return
     }
     setCustomer(String(initialQuote?.customer || ''))
     setDate(String(initialQuote?.date || new Date().toISOString().slice(0,10)))
     setNotes(String(initialQuote?.notes || ''))
+    setTotalize(initialQuote?.totalize !== false)
     setItems(mapQuoteItemsToForm(initialQuote?.items))
   }, [initialQuote?.id, isEdit])
 
@@ -411,6 +414,7 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
         customer,
         date,
         notes,
+        totalize,
         items: preparedItems,
       }
       const url = isEdit ? `/api/quotes/${encodeURIComponent(initialQuote.id)}` : '/api/quotes'
@@ -421,6 +425,7 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
       if (!isEdit) {
         setCustomer('')
         setNotes('')
+        setTotalize(true)
         setItems([makeEmptyItem()])
       }
       onClose?.()
@@ -567,7 +572,16 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
 
         <div className="mt-4 flex gap-4 items-center">
           <button onClick={()=>setItems(prev=>[...prev, makeEmptyItem()])} className="px-4 py-2 rounded-xl border border-white/10 transition-all duration-200 ease-out hover:bg-white/5 text-sm font-bold">+ Agregar item</button>
-          <div className="ml-auto text-base leading-6 font-bold">TOTAL: {total.toLocaleString('es-CO')}</div>
+          <label className="ml-auto inline-flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={totalize}
+              onChange={(e) => setTotalize(Boolean(e.target.checked))}
+              className="h-4 w-4 accent-indigo-500"
+            />
+            Totalizar cotización
+          </label>
+          <div className="text-base leading-6 font-bold">TOTAL: {totalize ? total.toLocaleString('es-CO') : '-----'}</div>
         </div>
       </div>
 
