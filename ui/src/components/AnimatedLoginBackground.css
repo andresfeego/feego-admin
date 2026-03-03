@@ -1,0 +1,123 @@
+.alb-root {
+  position: fixed;
+  inset: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  background: #f3f6fb;
+}
+
+.alb-base-gradient {
+  position: absolute;
+  inset: -15%;
+  background:
+    radial-gradient(90% 85% at 12% 18%, rgba(29, 78, 216, 0.18), transparent 64%),
+    radial-gradient(80% 80% at 86% 16%, rgba(109, 40, 217, 0.16), transparent 62%),
+    radial-gradient(75% 75% at 58% 86%, rgba(217, 70, 239, 0.12), transparent 68%),
+    linear-gradient(140deg, #f6f9ff 0%, #eef3fb 100%);
+  background-size: 200% 200%;
+  animation: alb-shift 29s ease-in-out infinite alternate;
+}
+
+.alb-blob {
+  position: absolute;
+  width: min(66vw, 720px);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  pointer-events: none;
+  filter: blur(61px);
+  opacity: 0.42;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+}
+
+.alb-blob-a {
+  left: -16vw;
+  top: -26vh;
+  background: radial-gradient(circle at 32% 28%, rgba(37, 99, 235, 0.44) 0%, rgba(37, 99, 235, 0) 62%);
+  animation: alb-float-a 22s ease-in-out infinite;
+}
+
+.alb-blob-b {
+  right: -18vw;
+  top: -22vh;
+  background: radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.4) 0%, rgba(99, 102, 241, 0) 60%);
+  animation: alb-float-b 27s ease-in-out infinite;
+}
+
+.alb-blob-c {
+  left: 22vw;
+  bottom: -34vh;
+  background: radial-gradient(circle at 36% 34%, rgba(217, 70, 239, 0.3) 0%, rgba(217, 70, 239, 0) 65%);
+  animation: alb-float-c 25s ease-in-out infinite;
+}
+
+.alb-noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='%23000' fill-opacity='0.5'%3E%3Ccircle cx='8' cy='14' r='1'/%3E%3Ccircle cx='56' cy='26' r='1'/%3E%3Ccircle cx='98' cy='42' r='1'/%3E%3Ccircle cx='124' cy='82' r='1'/%3E%3Ccircle cx='38' cy='92' r='1'/%3E%3Ccircle cx='84' cy='118' r='1'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+.alb-content {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+@keyframes alb-shift {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 100% 100%; }
+}
+
+@keyframes alb-float-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6vw, 7vh, 0) scale(1.08); }
+}
+
+@keyframes alb-float-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-7vw, 6vh, 0) scale(1.06); }
+}
+
+@keyframes alb-float-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(4vw, -8vh, 0) scale(1.09); }
+}
+
+/* Ajuste de colores:
+   Cambia los rgba de .alb-base-gradient y .alb-blob-* para la paleta.
+   Mantén alpha bajo (0.12-0.45) para no distraer del formulario. */
+
+/* Ajuste de velocidad:
+   Edita 28s/31s/34s/36s en las animations.
+   Más alto = más lento y elegante, más bajo = más dinámico. */
+
+/* Ajuste de blur/intensidad:
+   Cambia filter: blur(68px) y opacity: 0.42 en .alb-blob.
+   Menos blur/opacidad = más marcado; más blur = más suave. */
+
+@media (max-width: 768px) {
+  .alb-blob {
+    width: min(96vw, 520px);
+    filter: blur(50px);
+    opacity: 0.38;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alb-base-gradient,
+  .alb-blob-a,
+  .alb-blob-b,
+  .alb-blob-c {
+    animation: none !important;
+  }
+}

@@ -84,6 +84,51 @@ function MobileHeader() {
 }
 
 function Layout() {
+  const { loading, user } = useAuth()
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const origFetch = window.fetch.bind(window)
+    window.fetch = async (...args) => {
+      const res = await origFetch(...args)
+      try {
+        const input = args[0]
+        const url = typeof input === 'string'
+          ? input
+          : (input && typeof input.url === 'string' ? input.url : '')
+        const isApi = url.startsWith('/api/') || url.includes('/api/')
+        if (res.status === 401 && isApi && window.location.pathname !== '/login') {
+          window.location.assign('/login')
+        }
+      } catch {}
+      return res
+    }
+    return () => {
+      window.fetch = origFetch
+    }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen grid place-items-center text-sm text-slate-400">
+        Cargando...
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen">
+        <main className="min-h-screen max-w-full overflow-x-hidden">
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen">
       <MobileHeader />
@@ -92,12 +137,10 @@ function Layout() {
         <main className="flex-1 p-4 md:p-6 lg:p-8 2xl:p-12 max-w-full overflow-x-hidden">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-            <Route path="/login" element={<LoginPage />} />
-
-            <Route path="/site" element={<MarketingPage />} />
-            <Route path="/quotes" element={<QuotesPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/site" element={<RequireAuth><MarketingPage /></RequireAuth>} />
+            <Route path="/quotes" element={<RequireAuth><QuotesPage /></RequireAuth>} />
+            <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
 
             <Route
               path="/dashboard"

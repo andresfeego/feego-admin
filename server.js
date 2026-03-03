@@ -1374,6 +1374,19 @@ app.get('/api/branding/logo', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/public/branding/logo', async (req, res) => {
+  try {
+    const { logoFile } = getBrandingPaths();
+    const st = await fs.promises.stat(logoFile);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Length', String(st.size));
+    res.setHeader('Cache-Control', 'no-store');
+    fs.createReadStream(logoFile).pipe(res);
+  } catch {
+    res.status(404).end();
+  }
+});
+
 app.post('/api/branding/signature', requireAuth, brandingUpload.single('signature'), async (req, res) => {
   const f = req.file;
   if (!f || !f.buffer) return res.status(400).json({ ok: false, error: 'no_file' });

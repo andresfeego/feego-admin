@@ -2,6 +2,7 @@ import React from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { Card, Button, Input } from '../components/ui.jsx'
+import AnimatedLoginBackgroundV3 from '../components/AnimatedLoginBackgroundV3.jsx'
 
 export default function LoginPage() {
   const { user, login } = useAuth()
@@ -25,11 +26,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center">
-      <div className="w-[92vw] max-w-md">
-        <Card className="p-5">
-          <div className="text-xl font-black">Iniciar sesión</div>
-          <div className="text-xs feego-muted mt-1">Feego Admin</div>
+    <AnimatedLoginBackgroundV3>
+      <div className="relative z-10 w-[92vw] max-w-md">
+        <Card className="p-5 md:p-6 bg-white/70 backdrop-blur-[3px]">
+          <div className="mb-4 flex items-center justify-center">
+            <img
+              src="/api/public/branding/logo"
+              alt="Feego"
+              className="max-h-16 w-auto object-contain"
+              onError={(e) => { e.currentTarget.style.display = 'none' }}
+            />
+          </div>
+          <div className="text-xl font-black text-center">Iniciar sesión</div>
+          <div className="text-xs feego-muted mt-1 text-center">Feego Admin</div>
 
           <form onSubmit={onSubmit} className="mt-4 space-y-3">
             <Input placeholder="Usuario" value={username} onChange={(e) => setUsername(e.target.value)} />
@@ -39,6 +48,6 @@ export default function LoginPage() {
           </form>
         </Card>
       </div>
-    </div>
+    </AnimatedLoginBackgroundV3>
   )
 }
