@@ -24,6 +24,9 @@ const DB_PASS = process.env.DB_PASS || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const UI_DIST_DIR = process.env.UI_DIST_DIR || '/opt/feego-admin/ui/dist';
 const UI_DIST_ASSETS_DIR = process.env.UI_DIST_ASSETS_DIR || path.join(UI_DIST_DIR, 'assets');
+function getDataRoot() {
+  return process.env.FEEGO_DATA_ROOT || path.resolve(process.cwd(), 'data');
+}
 
 // TEMP: large limit while migrating sites
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/root/.openclaw/workspace/uploads/andres/inbox';
@@ -774,7 +777,7 @@ async function refresh(){
 // --- API ---
 
 // --- Quotes (simple JSON store + PDF generator) ---
-const QUOTES_DIR = process.env.QUOTES_DIR || '/opt/feego-admin/data';
+const QUOTES_DIR = process.env.QUOTES_DIR || path.join(getDataRoot(), 'cotizaciones');
 
 // --- phpMyAdmin temporary token gate (Nginx auth_request) ---
 // (moved below after FEEGO_DATA_ROOT is defined)
@@ -793,6 +796,87 @@ function safeMoney(n) {
   const x = Number(n || 0);
   if (!Number.isFinite(x)) return 0;
   return Math.max(0, Math.round(x));
+}
+
+function defaultBranding() {
+  return {
+    companyName: 'Feego',
+    legalName: 'Feego',
+    nit: '',
+    email: '',
+    phone: '',
+    website: '',
+    address: '',
+    quoteTitle: 'COTIZACION',
+    validityDays: 15,
+    paymentTerms: '50% anticipo y 50% contra entrega.',
+    notesFooter: 'Gracias por confiar en Feego.',
+    warrantyParagraph: 'Todos los equipos cuentan con una garantia limitada sujeta a diagnostico tecnico y condiciones de uso.',
+    signerName: '',
+    signerRole: '',
+    accentColor: '#1f4db6',
+  };
+}
+
+function getBrandingPaths() {
+  const root = getDataRoot();
+  return {
+    dir: path.join(root, 'branding'),
+    configFile: path.join(root, 'branding', 'branding.json'),
+    logoFile: path.join(root, 'branding', 'logo.png'),
+    signatureFile: path.join(root, 'branding', 'signature.png'),
+  };
+}
+
+async function readBranding() {
+  const { configFile } = getBrandingPaths();
+  try {
+    const raw = await fs.promises.readFile(configFile, 'utf8');
+    const parsed = JSON.parse(raw);
+    return { ...defaultBranding(), ...(parsed || {}) };
+  } catch {
+    return defaultBranding();
+  }
+}
+
+async function writeBranding(next) {
+  const { dir, configFile } = getBrandingPaths();
+  await fs.promises.mkdir(dir, { recursive: true });
+  const merged = { ...defaultBranding(), ...(next || {}) };
+  await fs.promises.writeFile(configFile, JSON.stringify(merged, null, 2), 'utf8');
+  return merged;
+}
+
+function hexToRgbSafe(hex, fallback = [31, 77, 182]) {
+  const h = String(hex || '').trim().replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return fallback;
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+function drawWrappedText(page, text, x, y, maxWidth, lineHeight, font, size, color) {
+  const out = [];
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  let line = '';
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (font.widthOfTextAtSize(test, size) <= maxWidth) {
+      line = test;
+    } else {
+      if (line) out.push(line);
+      line = w;
+    }
+  }
+  if (line) out.push(line);
+  let yy = y;
+  for (const l of out) {
+    page.drawText(l, { x, y: yy, size, font, color });
+    yy -= lineHeight;
+  }
+  return yy;
 }
 
 app.get('/api/quotes', requireAuth, async (req, res) => {
@@ -819,8 +903,15 @@ app.post('/api/quotes', requireAuth, async (req, res) => {
         name: String(it.name || '').trim(),
         qty: safeMoney(it.qty || 1) || 1,
         unitPrice: safeMoney(it.unitPrice || 0),
-        imageUrl: String(it.imageUrl || '').trim(),
+        imageUrls: (() => {
+          const raw = Array.isArray(it.imageUrls) ? it.imageUrls : [it.imageUrl];
+          return raw
+            .map((u) => String(u || '').trim())
+            .filter(Boolean)
+            .slice(0, 10);
+        })(),
       }))
+      .map((it) => ({ ...it, imageUrl: it.imageUrls[0] || '' }))
       .filter((it) => it.name);
 
     const id = crypto.randomBytes(8).toString('hex');
@@ -845,76 +936,472 @@ app.get('/api/quotes/:id', requireAuth, async (req, res) => {
   res.json({ ok: true, quote: q });
 });
 
+app.put('/api/quotes/:id', requireAuth, async (req, res) => {
+  const id = String(req.params.id || '');
+  try {
+    const body = req.body || {};
+    const customer = String(body.customer || '').trim();
+    const date = String(body.date || '').trim();
+    const notes = String(body.notes || '').trim();
+    const items = Array.isArray(body.items) ? body.items : [];
+    if (!customer) return res.status(400).json({ ok: false, error: 'missing_customer' });
+
+    const cleanedItems = items
+      .map((it) => ({
+        name: String(it.name || '').trim(),
+        qty: safeMoney(it.qty || 1) || 1,
+        unitPrice: safeMoney(it.unitPrice || 0),
+        imageUrls: (() => {
+          const raw = Array.isArray(it.imageUrls) ? it.imageUrls : [it.imageUrl];
+          return raw
+            .map((u) => String(u || '').trim())
+            .filter(Boolean)
+            .slice(0, 10);
+        })(),
+      }))
+      .map((it) => ({ ...it, imageUrl: it.imageUrls[0] || '' }))
+      .filter((it) => it.name);
+
+    const list = await readQuotes();
+    const idx = list.findIndex((x) => String(x.id) === id);
+    if (idx < 0) return res.status(404).json({ ok: false, error: 'not_found' });
+
+    const prev = list[idx] || {};
+    const updated = {
+      ...prev,
+      customer,
+      date,
+      notes,
+      items: cleanedItems,
+      updatedAt: new Date().toISOString(),
+      updatedBy: req.session.username || 'unknown',
+    };
+    list[idx] = updated;
+    await writeQuotes(list);
+    res.json({ ok: true, quote: updated });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
+
 app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
   const id = String(req.params.id || '');
   const list = await readQuotes();
   const q = list.find(x => x.id === id);
   if (!q) return res.status(404).send('not_found');
+  const forceDownload = String((req.query && req.query.download) || '') === '1';
 
+  const branding = await readBranding();
+  const [r, g, b] = hexToRgbSafe(branding.accentColor);
+  const accent = rgb(r / 255, g / 255, b / 255);
   const doc = await PDFDocument.create();
-  const page = doc.addPage([612, 792]); // Letter
-  const { width, height } = page.getSize();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const PAGE_W = 612;
+  const PAGE_H = 792;
+  const margin = 38;
+  const footerReserved = 56;
+  const footerLineY = 34;
 
-  const margin = 48;
+  function drawCommonFooter(pageObj) {
+    const { width } = pageObj.getSize();
+    pageObj.drawLine({
+      start: { x: margin, y: footerLineY + 20 },
+      end: { x: width - margin, y: footerLineY + 20 },
+      thickness: 1,
+      color: rgb(0.88, 0.9, 0.94),
+    });
+    if (branding.notesFooter) {
+      pageObj.drawText(String(branding.notesFooter).slice(0, 130), {
+        x: margin,
+        y: footerLineY + 6,
+        size: 8,
+        font,
+        color: rgb(0.35, 0.4, 0.48),
+      });
+    }
+    if (branding.address) {
+      pageObj.drawText(String(branding.address).slice(0, 130), {
+        x: margin,
+        y: footerLineY - 6,
+        size: 8,
+        font,
+        color: rgb(0.35, 0.4, 0.48),
+      });
+    }
+  }
+
+  function newPage() {
+    const p = doc.addPage([PAGE_W, PAGE_H]);
+    drawCommonFooter(p);
+    return p;
+  }
+
+  async function embedAnyImage(url, reqObj) {
+    const raw = String(url || '').trim();
+    if (!raw) return null;
+    let buf = null;
+    try {
+      if (raw.startsWith('data:image/')) {
+        const b64 = raw.split(',')[1] || '';
+        if (b64) buf = Buffer.from(b64, 'base64');
+      } else if (raw.startsWith('/api/uploads/view?')) {
+        const u = new URL(`http://localhost${raw}`);
+        const name = String(u.searchParams.get('name') || '');
+        if (name && !name.includes('..') && !name.includes('/') && !name.includes('\\')) {
+          const full = path.join(UPLOAD_DIR, name);
+          buf = await fs.promises.readFile(full);
+        }
+      } else if (raw.startsWith('/content/uploads/')) {
+        const name = path.basename(raw);
+        const full = path.join(UPLOAD_DIR, name);
+        buf = await fs.promises.readFile(full);
+      } else if (raw.startsWith('http://') || raw.startsWith('https://')) {
+        const rmt = await fetch(raw, { headers: { 'User-Agent': 'FeegoAdmin/1.0' } });
+        if (rmt.ok) buf = Buffer.from(await rmt.arrayBuffer());
+      }
+      if (!buf || !buf.length) return null;
+      const png = await sharp(buf).rotate().png({ compressionLevel: 9 }).toBuffer();
+      const img = await doc.embedPng(png);
+      return img;
+    } catch {
+      return null;
+    }
+  }
+
+  const imageCache = new Map();
+  async function getImage(url) {
+    if (!url) return null;
+    if (imageCache.has(url)) return imageCache.get(url);
+    const img = await embedAnyImage(url, req);
+    imageCache.set(url, img);
+    return img;
+  }
+
+  // First page
+  const page = newPage();
+  const { width, height } = page.getSize();
   let y = height - margin;
 
-  // Header bar
-  page.drawRectangle({ x: margin, y: y - 34, width: width - margin*2, height: 34, color: rgb(0.12, 0.23, 0.54) });
-  page.drawText('COTIZACIÓN', { x: margin + 14, y: y - 24, size: 16, font: fontBold, color: rgb(1,1,1) });
-  y -= 52;
+  page.drawRectangle({ x: 0, y: height - 132, width, height: 132, color: rgb(0.97, 0.98, 1) });
+  page.drawRectangle({ x: 0, y: height - 8, width, height: 8, color: accent });
 
-  page.drawText(`Fecha: ${q.date || new Date().toLocaleDateString('es-CO')}`, { x: margin, y, size: 11, font, color: rgb(0.15,0.15,0.17) });
-  y -= 16;
-  page.drawText(`Cotizado a: ${q.customer}`, { x: margin, y, size: 11, font: fontBold, color: rgb(0.1,0.1,0.12) });
+  try {
+    const { logoFile } = getBrandingPaths();
+    const logoBuf = await fs.promises.readFile(logoFile);
+    const logoImage = await doc.embedPng(logoBuf);
+    const maxW = 110;
+    const maxH = 58;
+    const scale = Math.min(maxW / logoImage.width, maxH / logoImage.height, 1);
+    const w = logoImage.width * scale;
+    const h = logoImage.height * scale;
+    page.drawImage(logoImage, { x: width - margin - w, y: height - 88 - (h / 2), width: w, height: h });
+  } catch {}
+
+  page.drawText(String(branding.quoteTitle || 'COTIZACION').toUpperCase(), {
+    x: margin, y: height - 62, size: 22, font: fontBold, color: accent,
+  });
+  page.drawText(`No. ${id.slice(0, 8).toUpperCase()}`, {
+    x: margin, y: height - 82, size: 10, font, color: rgb(0.3, 0.35, 0.45),
+  });
+
+  // 2-column company header
+  const headerBottom = height - 132;
+  const infoTopY = headerBottom + 44;
+  const col1x = margin;
+  const col2x = margin + 260;
+  const leftInfo = [
+    String(branding.legalName || branding.companyName || 'Feego'),
+    branding.nit ? `NIT: ${branding.nit}` : '',
+    branding.phone ? `Tel: ${branding.phone}` : '',
+  ].filter(Boolean);
+  const rightInfo = [
+    branding.email ? `Email: ${branding.email}` : '',
+    branding.website ? `Web: ${branding.website}` : '',
+  ].filter(Boolean);
+  let ly = infoTopY;
+  for (const line of leftInfo.slice(0, 4)) { page.drawText(line, { x: col1x, y: ly, size: 9, font, color: rgb(0.25, 0.28, 0.35) }); ly -= 12; }
+  let ry = infoTopY;
+  for (const line of rightInfo.slice(0, 4)) { page.drawText(line, { x: col2x, y: ry, size: 9, font, color: rgb(0.25, 0.28, 0.35) }); ry -= 12; }
+
+  y = headerBottom - 16;
+  page.drawRectangle({ x: margin, y: y - 58, width: width - margin * 2, height: 58, color: rgb(0.99, 0.99, 1) });
+  page.drawRectangle({ x: margin, y: y - 58, width: width - margin * 2, height: 58, borderColor: rgb(0.9, 0.92, 0.96), borderWidth: 1 });
+  page.drawText('CLIENTE', { x: margin + 12, y: y - 16, size: 9, font: fontBold, color: rgb(0.45, 0.5, 0.6) });
+  page.drawText(String(q.customer || 'N/A').slice(0, 70), { x: margin + 12, y: y - 32, size: 12, font: fontBold, color: rgb(0.12, 0.14, 0.18) });
+  page.drawText(`Fecha: ${q.date || new Date().toLocaleDateString('es-CO')}`, { x: width - margin - 170, y: y - 24, size: 10, font, color: rgb(0.22, 0.25, 0.3) });
+  y -= 78;
+
+  const colItem = margin + 10;
+  const colQty = width - margin - 175;
+  const colUnit = width - margin - 120;
+  const colTotal = width - margin - 58;
+  page.drawRectangle({ x: margin, y: y - 20, width: width - margin * 2, height: 20, color: accent });
+  page.drawText('ITEM', { x: colItem, y: y - 14, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+  page.drawText('CANT.', { x: colQty, y: y - 14, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+  page.drawText('UNIT.', { x: colUnit, y: y - 14, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+  page.drawText('TOTAL', { x: colTotal, y: y - 14, size: 9, font: fontBold, color: rgb(1, 1, 1) });
   y -= 24;
 
-  // Table header
-  page.drawRectangle({ x: margin, y: y - 18, width: width - margin*2, height: 18, color: rgb(0.94, 0.95, 0.98) });
-  page.drawText('Producto', { x: margin + 8, y: y - 13, size: 10, font: fontBold, color: rgb(0.1,0.1,0.12) });
-  page.drawText('Cant.', { x: width - margin - 170, y: y - 13, size: 10, font: fontBold, color: rgb(0.1,0.1,0.12) });
-  page.drawText('Unit.', { x: width - margin - 125, y: y - 13, size: 10, font: fontBold, color: rgb(0.1,0.1,0.12) });
-  page.drawText('Total', { x: width - margin - 70, y: y - 13, size: 10, font: fontBold, color: rgb(0.1,0.1,0.12) });
-  y -= 28;
-
   let grand = 0;
-  for (const it of (q.items || [])) {
+  const rows = (q.items || []).slice(0, 35);
+  for (let idx = 0; idx < rows.length; idx += 1) {
+    const it = rows[idx];
     const qty = safeMoney(it.qty || 1) || 1;
     const unit = safeMoney(it.unitPrice || 0);
     const total = qty * unit;
     grand += total;
-
-    // row line
-    page.drawLine({ start: { x: margin, y: y - 2 }, end: { x: width - margin, y: y - 2 }, thickness: 1, color: rgb(0.92,0.93,0.95) });
-
-    // text
-    const name = String(it.name || '').slice(0, 70);
-    page.drawText(name, { x: margin + 8, y: y - 12, size: 10, font, color: rgb(0.08,0.08,0.1) });
-    page.drawText(String(qty), { x: width - margin - 165, y: y - 12, size: 10, font, color: rgb(0.08,0.08,0.1) });
-    page.drawText(unit.toLocaleString('es-CO'), { x: width - margin - 125, y: y - 12, size: 10, font, color: rgb(0.08,0.08,0.1) });
-    page.drawText(total.toLocaleString('es-CO'), { x: width - margin - 70, y: y - 12, size: 10, font: fontBold, color: rgb(0.08,0.08,0.1) });
-
-    y -= 22;
-    if (y < 120) break; // MVP: single page
+    const rowBg = idx % 2 === 0 ? rgb(0.985, 0.988, 0.995) : rgb(1, 1, 1);
+    page.drawRectangle({ x: margin, y: y - 20, width: width - margin * 2, height: 20, color: rowBg });
+    page.drawRectangle({ x: margin, y: y - 20, width: width - margin * 2, height: 20, borderColor: rgb(0.93, 0.94, 0.97), borderWidth: 0.6 });
+    page.drawText(`${idx + 1}. ${String(it.name || '').slice(0, 65)}`, { x: colItem, y: y - 14, size: 9, font, color: rgb(0.12, 0.14, 0.18) });
+    page.drawText(String(qty), { x: colQty + 4, y: y - 14, size: 9, font, color: rgb(0.12, 0.14, 0.18) });
+    page.drawText(unit.toLocaleString('es-CO'), { x: colUnit - 2, y: y - 14, size: 9, font, color: rgb(0.12, 0.14, 0.18) });
+    page.drawText(total.toLocaleString('es-CO'), { x: colTotal - 2, y: y - 14, size: 9, font: fontBold, color: rgb(0.12, 0.14, 0.18) });
+    y -= 20;
+    if (y < 220) break;
   }
 
-  // Total
-  y -= 10;
-  page.drawRectangle({ x: width - margin - 220, y: y - 26, width: 220, height: 26, color: rgb(0.97,0.98,1) });
-  page.drawText('TOTAL', { x: width - margin - 210, y: y - 18, size: 11, font: fontBold, color: rgb(0.1,0.1,0.12) });
-  page.drawText(grand.toLocaleString('es-CO'), { x: width - margin - 70, y: y - 18, size: 11, font: fontBold, color: rgb(0.1,0.1,0.12) });
-  y -= 40;
+  y -= 12;
+  page.drawRectangle({ x: width - margin - 250, y: y - 52, width: 250, height: 52, color: rgb(0.97, 0.98, 1) });
+  page.drawRectangle({ x: width - margin - 250, y: y - 52, width: 250, height: 52, borderColor: rgb(0.88, 0.9, 0.95), borderWidth: 1 });
+  page.drawText('TOTAL COTIZACION', { x: width - margin - 238, y: y - 20, size: 10, font: fontBold, color: rgb(0.28, 0.31, 0.38) });
+  page.drawText(grand.toLocaleString('es-CO'), { x: width - margin - 110, y: y - 38, size: 16, font: fontBold, color: accent });
+  y -= 70;
 
   if (q.notes) {
-    page.drawText(q.notes.slice(0, 500), { x: margin, y: y - 12, size: 9, font, color: rgb(0.25,0.25,0.3), maxWidth: width - margin*2, lineHeight: 12 });
+    page.drawText('Notas', { x: margin, y, size: 10, font: fontBold, color: rgb(0.3, 0.35, 0.45) });
+    y -= 16;
+    y = drawWrappedText(page, String(q.notes), margin, y, width - margin * 2, 12, font, 9, rgb(0.2, 0.24, 0.3));
+    y -= 16;
+  }
+
+  const validityDays = Number(branding.validityDays || 0);
+  const validity = Number.isFinite(validityDays) && validityDays > 0 ? `${validityDays} dias` : 'N/A';
+  const lineY = Math.max(footerReserved + 120, y - 12);
+  page.drawLine({ start: { x: margin, y: lineY }, end: { x: width - margin, y: lineY }, thickness: 1, color: rgb(0.86, 0.89, 0.94) });
+  let txtY = lineY - 14;
+  page.drawText(`Validez: ${validity}`, { x: margin, y: txtY, size: 9, font: fontBold, color: rgb(0.28, 0.31, 0.38) });
+  txtY -= 16;
+  const conditionsText = String(branding.paymentTerms || '').trim();
+  if (conditionsText) {
+    page.drawText('Condiciones:', { x: margin, y: txtY, size: 9, font: fontBold, color: rgb(0.28, 0.31, 0.38) });
+    txtY = drawWrappedText(page, conditionsText, margin + 78, txtY, width - margin * 2 - 82, 10.5, font, 8.6, rgb(0.28, 0.31, 0.38));
+    txtY -= 10;
+  }
+  const warrantyText = String(branding.warrantyParagraph || '').trim();
+  if (warrantyText) {
+    page.drawText('Garantia', { x: margin, y: txtY, size: 9, font: fontBold, color: rgb(0.3, 0.35, 0.45) });
+    txtY = drawWrappedText(page, warrantyText, margin + 54, txtY, width - margin * 2 - 58, 10.5, font, 8.6, rgb(0.35, 0.4, 0.48));
+    txtY -= 8;
+  }
+
+  // centered signature around 120px under last paragraph
+  const signatureLineY = Math.max(footerReserved + 24, txtY - 120);
+  const sigW = 200;
+  const sigX = (width - sigW) / 2;
+  const sigY = signatureLineY + 4;
+  try {
+    const { signatureFile } = getBrandingPaths();
+    const sigBuf = await fs.promises.readFile(signatureFile);
+    const sigImg = await doc.embedPng(sigBuf);
+    const maxW = 180;
+    const maxH = 54;
+    const scale = Math.min(maxW / sigImg.width, maxH / sigImg.height, 1);
+    const sw = sigImg.width * scale;
+    const sh = sigImg.height * scale;
+    page.drawImage(sigImg, { x: sigX + (sigW - sw) / 2, y: sigY, width: sw, height: sh });
+  } catch {}
+  page.drawLine({ start: { x: sigX, y: signatureLineY }, end: { x: sigX + sigW, y: signatureLineY }, thickness: 1, color: rgb(0.8, 0.83, 0.88) });
+  if (branding.signerName) page.drawText(String(branding.signerName).slice(0, 48), { x: sigX, y: signatureLineY - 12, size: 8, font: fontBold, color: rgb(0.25, 0.3, 0.38) });
+  if (branding.signerRole) page.drawText(String(branding.signerRole).slice(0, 54), { x: sigX, y: signatureLineY - 22, size: 8, font, color: rgb(0.35, 0.4, 0.48) });
+
+  // Annex pages with item images
+  const itemsForAnnex = (q.items || []).map((it, idx) => ({
+    idx,
+    name: String(it.name || ''),
+    imageUrls: Array.isArray(it.imageUrls) ? it.imageUrls.filter(Boolean) : (it.imageUrl ? [String(it.imageUrl)] : []),
+  })).filter((it) => it.imageUrls.length > 0);
+
+  if (itemsForAnnex.length > 0) {
+    let p = newPage();
+    let py = PAGE_H - margin;
+    p.drawText('ANEXO FOTOGRAFICO', { x: margin, y: py - 4, size: 14, font: fontBold, color: accent });
+    py -= 24;
+
+    const contentBottom = footerReserved + 20;
+    const availableW = PAGE_W - margin * 2;
+
+    for (const it of itemsForAnnex) {
+      const titleH = 22;
+      if (py - titleH < contentBottom) {
+        p = newPage();
+        py = PAGE_H - margin;
+      }
+      p.drawRectangle({ x: margin, y: py - titleH, width: availableW, height: titleH, color: rgb(0.92, 0.95, 1) });
+      p.drawRectangle({ x: margin, y: py - titleH, width: availableW, height: titleH, borderColor: rgb(0.8, 0.86, 0.96), borderWidth: 1 });
+      p.drawText(`ITEM ${it.idx + 1}: ${it.name}`.slice(0, 110), { x: margin + 10, y: py - 15, size: 10, font: fontBold, color: rgb(0.18, 0.26, 0.45) });
+      py -= (titleH + 10);
+
+      if (it.imageUrls.length === 1) {
+        const img = await getImage(it.imageUrls[0]);
+        if (img) {
+          const maxW = availableW * 0.7;
+          const maxH = 280;
+          const s = Math.min(maxW / img.width, maxH / img.height, 1);
+          const iw = img.width * s;
+          const ih = img.height * s;
+          if (py - ih < contentBottom) {
+            p = newPage();
+            py = PAGE_H - margin;
+          }
+          p.drawRectangle({ x: (PAGE_W - iw) / 2 - 4, y: py - ih - 4, width: iw + 8, height: ih + 8, color: rgb(0.98, 0.99, 1) });
+          p.drawRectangle({ x: (PAGE_W - iw) / 2 - 4, y: py - ih - 4, width: iw + 8, height: ih + 8, borderColor: rgb(0.86, 0.9, 0.96), borderWidth: 1 });
+          p.drawImage(img, { x: (PAGE_W - iw) / 2, y: py - ih, width: iw, height: ih });
+          py -= (ih + 16);
+        } else {
+          p.drawText('No se pudo cargar la imagen.', { x: margin, y: py - 12, size: 9, font, color: rgb(0.45, 0.45, 0.5) });
+          py -= 20;
+        }
+      } else {
+        const gap = 12;
+        const boxW = (availableW - gap) / 2;
+        const boxH = 170;
+        for (let i = 0; i < it.imageUrls.length; i += 2) {
+          if (py - boxH < contentBottom) {
+            p = newPage();
+            py = PAGE_H - margin;
+          }
+          for (let c = 0; c < 2; c += 1) {
+            const idx2 = i + c;
+            if (idx2 >= it.imageUrls.length) continue;
+            const x = margin + c * (boxW + gap);
+            p.drawRectangle({ x, y: py - boxH, width: boxW, height: boxH, color: rgb(0.98, 0.99, 1) });
+            p.drawRectangle({ x, y: py - boxH, width: boxW, height: boxH, borderColor: rgb(0.86, 0.9, 0.96), borderWidth: 1 });
+            const img = await getImage(it.imageUrls[idx2]);
+            if (!img) continue;
+            const s = Math.min((boxW - 10) / img.width, (boxH - 10) / img.height, 1);
+            const iw = img.width * s;
+            const ih = img.height * s;
+            p.drawImage(img, { x: x + (boxW - iw) / 2, y: py - boxH + (boxH - ih) / 2, width: iw, height: ih });
+          }
+          py -= (boxH + 12);
+        }
+      }
+      py -= 8;
+    }
   }
 
   const pdfBytes = await doc.save();
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="cotizacion_${q.customer.replace(/[^a-z0-9]+/gi,'_')}_${id}.pdf"`);
+  const filename = `cotizacion_${q.customer.replace(/[^a-z0-9]+/gi,'_')}_${id}.pdf`;
+  res.setHeader('Content-Disposition', `${forceDownload ? 'attachment' : 'inline'}; filename="${filename}"`);
   res.setHeader('Cache-Control', 'no-store');
   res.end(Buffer.from(pdfBytes));
+});
+
+const brandingUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 12 * 1024 * 1024 },
+});
+
+app.get('/api/branding', requireAuth, async (req, res) => {
+  try {
+    const branding = await readBranding();
+    const { logoFile, signatureFile } = getBrandingPaths();
+    const hasLogo = await fs.promises.stat(logoFile).then(() => true).catch(() => false);
+    const hasSignature = await fs.promises.stat(signatureFile).then(() => true).catch(() => false);
+    res.json({ ok: true, branding, hasLogo, hasSignature });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.post('/api/branding', requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const next = {
+      companyName: String(body.companyName || '').trim(),
+      legalName: String(body.legalName || '').trim(),
+      nit: String(body.nit || '').trim(),
+      email: String(body.email || '').trim(),
+      phone: String(body.phone || '').trim(),
+      website: String(body.website || '').trim(),
+      address: String(body.address || '').trim(),
+      quoteTitle: String(body.quoteTitle || '').trim() || 'COTIZACION',
+      validityDays: Math.max(0, Number(body.validityDays || 0) || 0),
+      paymentTerms: String(body.paymentTerms || '').trim(),
+      notesFooter: String(body.notesFooter || '').trim(),
+      warrantyParagraph: String(body.warrantyParagraph || '').trim(),
+      signerName: String(body.signerName || '').trim(),
+      signerRole: String(body.signerRole || '').trim(),
+      accentColor: /^#[0-9a-fA-F]{6}$/.test(String(body.accentColor || '').trim()) ? String(body.accentColor).trim() : '#1f4db6',
+    };
+    const branding = await writeBranding(next);
+    res.json({ ok: true, branding });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.post('/api/branding/logo', requireAuth, brandingUpload.single('logo'), async (req, res) => {
+  const f = req.file;
+  if (!f || !f.buffer) return res.status(400).json({ ok: false, error: 'no_file' });
+  try {
+    const { dir, logoFile } = getBrandingPaths();
+    await fs.promises.mkdir(dir, { recursive: true });
+    await sharp(f.buffer)
+      .rotate()
+      .resize({ width: 1200, height: 400, fit: 'inside', withoutEnlargement: true })
+      .png({ compressionLevel: 9 })
+      .toFile(logoFile);
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.get('/api/branding/logo', requireAuth, async (req, res) => {
+  try {
+    const { logoFile } = getBrandingPaths();
+    const st = await fs.promises.stat(logoFile);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Length', String(st.size));
+    res.setHeader('Cache-Control', 'no-store');
+    fs.createReadStream(logoFile).pipe(res);
+  } catch {
+    res.status(404).end();
+  }
+});
+
+app.post('/api/branding/signature', requireAuth, brandingUpload.single('signature'), async (req, res) => {
+  const f = req.file;
+  if (!f || !f.buffer) return res.status(400).json({ ok: false, error: 'no_file' });
+  try {
+    const { dir, signatureFile } = getBrandingPaths();
+    await fs.promises.mkdir(dir, { recursive: true });
+    await sharp(f.buffer)
+      .rotate()
+      .resize({ width: 900, height: 260, fit: 'inside', withoutEnlargement: true })
+      .png({ compressionLevel: 9 })
+      .toFile(signatureFile);
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.get('/api/branding/signature', requireAuth, async (req, res) => {
+  try {
+    const { signatureFile } = getBrandingPaths();
+    const st = await fs.promises.stat(signatureFile);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Length', String(st.size));
+    res.setHeader('Cache-Control', 'no-store');
+    fs.createReadStream(signatureFile).pipe(res);
+  } catch {
+    res.status(404).end();
+  }
 });
 
 
@@ -1053,6 +1540,36 @@ const upload = multer({
   limits: { fileSize: MAX_FILE_MB * 1024 * 1024 },
 });
 
+function extFromImageContentType(ct) {
+  const t = String(ct || '').toLowerCase().split(';')[0].trim();
+  if (t === 'image/jpeg') return 'jpg';
+  if (t === 'image/png') return 'png';
+  if (t === 'image/webp') return 'webp';
+  if (t === 'image/gif') return 'gif';
+  if (t === 'image/bmp') return 'bmp';
+  if (t === 'image/svg+xml') return 'svg';
+  if (t === 'image/heic') return 'heic';
+  if (t === 'image/heif') return 'heif';
+  if (t === 'image/avif') return 'avif';
+  if (t === 'image/tiff') return 'tiff';
+  return '';
+}
+
+function extFromRemoteUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    const ext = path.extname(u.pathname || '').replace('.', '').toLowerCase();
+    if (['jpg','jpeg','png','webp','gif','bmp','svg','heic','heif','avif','tif','tiff'].includes(ext)) {
+      if (ext === 'jpeg') return 'jpg';
+      if (ext === 'tif') return 'tiff';
+      return ext;
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 app.post('/api/uploads', requireAuth, upload.single('file'), async (req, res) => {
   const f = req.file;
   if (!f) return res.status(400).json({ ok: false, error: 'no_file' });
@@ -1066,6 +1583,56 @@ app.post('/api/uploads', requireAuth, upload.single('file'), async (req, res) =>
     }
   } catch (_e) {}
   res.json({ ok: true, file: item });
+});
+
+app.post('/api/uploads/from-url', requireAuth, async (req, res) => {
+  const rawUrl = String((req.body && req.body.url) || '').trim();
+  if (!rawUrl) return res.status(400).json({ ok: false, error: 'missing_url' });
+
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return res.status(400).json({ ok: false, error: 'bad_url' });
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return res.status(400).json({ ok: false, error: 'bad_protocol' });
+  }
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(parsed.toString(), {
+      method: 'GET',
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'FeegoAdmin/1.0' },
+    });
+    if (!r.ok) return res.status(400).json({ ok: false, error: 'fetch_failed', status: r.status });
+
+    const ct = String(r.headers.get('content-type') || '').toLowerCase();
+    if (ct && !ct.startsWith('image/')) return res.status(400).json({ ok: false, error: 'not_image' });
+
+    const ab = await r.arrayBuffer();
+    const buf = Buffer.from(ab);
+    if (!buf.length) return res.status(400).json({ ok: false, error: 'empty_file' });
+    if (buf.length > MAX_FILE_MB * 1024 * 1024) {
+      return res.status(413).json({ ok: false, error: 'file_too_large', maxMb: MAX_FILE_MB });
+    }
+
+    const ext = extFromImageContentType(ct) || extFromRemoteUrl(parsed.toString()) || 'jpg';
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `${stamp}__remote_${crypto.randomBytes(5).toString('hex')}.${ext}`;
+    const full = path.join(UPLOAD_DIR, filename);
+    await fs.promises.writeFile(full, buf);
+
+    res.json({ ok: true, file: { name: filename, size: buf.length } });
+  } catch (e) {
+    if (e && e.name === 'AbortError') return res.status(408).json({ ok: false, error: 'timeout' });
+    return res.status(500).json({ ok: false, error: 'fetch_exception' });
+  } finally {
+    clearTimeout(timeout);
+  }
 });
 
 app.get('/api/uploads/list', requireAuth, async (req, res) => {
@@ -1144,9 +1711,13 @@ app.get('/api/uploads/view', requireAuth, async (req, res) => {
 
     const ext = path.extname(name).replace('.', '').toLowerCase();
 
-    if (['png','jpg','jpeg','webp','gif','pdf'].includes(ext)) {
+    if (['png','jpg','jpeg','webp','gif','pdf','heic','heif','avif','tif','tiff'].includes(ext)) {
       const ct = (
         ext === 'pdf' ? 'application/pdf' :
+        ext === 'heic' ? 'image/heic' :
+        ext === 'heif' ? 'image/heif' :
+        ext === 'avif' ? 'image/avif' :
+        (ext === 'tif' || ext === 'tiff') ? 'image/tiff' :
         ext === 'png' ? 'image/png' :
         (ext === 'webp' ? 'image/webp' :
         (ext === 'gif' ? 'image/gif' : 'image/jpeg'))
@@ -1294,9 +1865,10 @@ app.post('/api/kanban/project', requireAuth, async (req, res) => {
 // FeegoAdmin persistent data
 // - VPS/prod: set FEEGO_DATA_ROOT to something like /srv/feego-data/feego-admin
 // - Local dev: defaults to <repo>/data
-const FEEGO_DATA_ROOT = process.env.FEEGO_DATA_ROOT || path.resolve(process.cwd(), 'data');
+const FEEGO_DATA_ROOT = getDataRoot();
 const KANBAN_LOGO_DIR = path.join(FEEGO_DATA_ROOT, 'project-logos');
 fs.mkdirSync(KANBAN_LOGO_DIR, { recursive: true });
+fs.mkdirSync(path.join(FEEGO_DATA_ROOT, 'branding'), { recursive: true });
 
 // --- phpMyAdmin temporary token gate (Nginx auth_request) ---
 const PMA_TOKEN_FILE = path.join(FEEGO_DATA_ROOT, 'pma-token.json');
@@ -1487,7 +2059,8 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
   const title = String((req.body && req.body.title) || '').trim();
   const project_id = Number((req.body && req.body.project_id) || 0) || null;
   const board = String((req.body && req.body.board) || 'ideas');
-  const status = String((req.body && req.body.status) || 'n/a');
+  const statusRaw = String((req.body && req.body.status) || 'n/a');
+  const status = board === 'ideas' ? 'n/a' : statusRaw;
   const section_ids_raw = Array.isArray(req.body && req.body.section_ids) ? req.body.section_ids : [];
   const section_id_raw = (req.body && req.body.section_id != null) ? Number(req.body.section_id) : null;
   const section_ids = Array.from(new Set(
@@ -1500,6 +2073,15 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
+    let insertSort = 9999;
+    if (board === 'ideas') {
+      const rows = await conn.query(
+        'SELECT MIN(sort) AS min_sort FROM kb_cards WHERE board=? AND ((project_id IS NULL AND ? IS NULL) OR project_id=?)',
+        [board, project_id, project_id]
+      );
+      const minSort = Number(rows && rows[0] ? rows[0].min_sort : NaN);
+      insertSort = Number.isFinite(minSort) ? (minSort - 1) : 0;
+    }
     const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
     let sectionRows = [];
     if (section_ids.length > 0) {
@@ -1512,16 +2094,16 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
     const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
     if (supportsSectionIdsJson) {
       await conn.query(
-        'INSERT INTO kb_cards (title, project_id, board, status, sort, section_id, section_ids_json) VALUES (?,?,?,?,9999,?,?)',
-        [title, project_id, board, status, primarySectionId, JSON.stringify(section_ids)]
+        'INSERT INTO kb_cards (title, project_id, board, status, sort, section_id, section_ids_json) VALUES (?,?,?,?,?,?,?)',
+        [title, project_id, board, status, insertSort, primarySectionId, JSON.stringify(section_ids)]
       );
     } else {
       const namesById = new Map((sectionRows || []).map((r) => [Number(r.id), String(r.name || '')]));
       const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
       const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
       await conn.query(
-        'INSERT INTO kb_cards (title, project_id, board, status, sort, section_id, section_name) VALUES (?,?,?,?,9999,?,?)',
-        [title, project_id, board, status, primarySectionId, sectionNameSerialized]
+        'INSERT INTO kb_cards (title, project_id, board, status, sort, section_id, section_name) VALUES (?,?,?,?,?,?,?)',
+        [title, project_id, board, status, insertSort, primarySectionId, sectionNameSerialized]
       );
     }
     res.json({ ok: true });
