@@ -179,6 +179,13 @@ function ProjectCard({ p, onClick }) {
             <div className={'mt-1 inline-flex items-center px-2 py-0.5 text-[11px] rounded-full border ' + statusColor}>{p.status}</div>
           </div>
         </div>
+        <div className="mt-3 flex items-center gap-2">
+          {typeof p.pending_count === 'number' && p.pending_count > 0 ? (
+            <div className="inline-flex items-center px-2 py-0.5 text-[11px] rounded-full border border-amber-500/25 bg-amber-500/10 text-amber-200">
+              Pendientes: {p.pending_count}
+            </div>
+          ) : null}
+        </div>
         <div className="mt-3 text-xs text-slate-300 space-y-1">
           {(p.domains || []).slice(0, 3).map((d) => (
             <div key={d} className="font-mono truncate">{d}</div>
@@ -197,6 +204,8 @@ export default function DashboardPage() {
 
   const [infraProjects, setInfraProjects] = React.useState([])
   const [activeProject, setActiveProject] = React.useState(null)
+  const [activeProjectMd, setActiveProjectMd] = React.useState(null)
+  const [activeProjectMdLoading, setActiveProjectMdLoading] = React.useState(false)
 
   const [ctxFiles, setCtxFiles] = React.useState([])
   const [ctxKey, setCtxKey] = React.useState('vps')
@@ -404,16 +413,54 @@ export default function DashboardPage() {
         {(infraProjects || []).length === 0 ? <div className="text-sm text-slate-400">No hay proyectos registrados.</div> : null}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {(infraProjects || []).map((p) => (
-            <ProjectCard key={p.slug} p={p} onClick={() => setActiveProject(p)} />
+            <ProjectCard key={p.slug} p={p} onClick={async () => {
+              setActiveProject(p)
+              setActiveProjectMd(null)
+              try {
+                setActiveProjectMdLoading(true)
+                const r = await api('/api/infra/projects/' + encodeURIComponent(p.slug) + '/md')
+                if (r.ok) setActiveProjectMd(r.data)
+              } finally {
+                setActiveProjectMdLoading(false)
+              }
+            }} />
           ))}
         </div>
       </Section>
 
-      <Modal open={!!activeProject} onClose={() => setActiveProject(null)} title={activeProject ? activeProject.name : ''}>
+            <Modal open={!!activeProject} onClose={() => { setActiveProject(null); setActiveProjectMd(null) }} title={activeProject ? activeProject.name : ''}>
         {!activeProject ? null : (
           <div className="space-y-4">
             <Card className="p-4">
-              <div className="text-xs feego-muted">Dominios</div>
+              <div className="text-xs feego-muted">Fuente</div>
+              <div className="mt-2 text-sm text-slate-300">.md del proyecto (si existe) + metadata DB para cards.</div>
+              {activeProjectMd && activeProjectMd.path ? <div className="mt-2 text-xs text-slate-400 font-mono">{activeProjectMd.path}</div> : null}
+              {activeProjectMdLoading ? <div className="mt-2 text-xs text-slate-400">Cargando .md…</div> : null}
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Pendientes</div>
+              {activeProjectMd && (activeProjectMd.pendientes || []).length ? (
+                <div className="mt-2 space-y-2">
+                  {(activeProjectMd.pendientes || []).map((it, i) => (
+                    <div key={i} className="text-sm">
+                      <span className="font-mono text-xs text-slate-400">[{it.tag}]</span>{' '}
+                      <span className="text-slate-200">{it.text}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-slate-400">—</div>
+              )}
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Detalle (Markdown completo)</div>
+              <pre className="mt-2 text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto max-h-[520px] whitespace-pre-wrap">{activeProjectMd && activeProjectMd.content ? activeProjectMd.content : '—'}</pre>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Dominios (DB)</div>
               <div className="mt-2 space-y-1">
                 {(activeProject.domains || []).map((d) => (
                   <div key={d} className="font-mono text-sm">{d}</div>
@@ -422,7 +469,7 @@ export default function DashboardPage() {
             </Card>
 
             <Card className="p-4">
-              <div className="text-xs feego-muted">GitHub</div>
+              <div className="text-xs feego-muted">GitHub (DB)</div>
               <div className="mt-2 text-sm">
                 {activeProject.repo_url ? (
                   <a className="underline" href={activeProject.repo_url} target="_blank" rel="noreferrer">{activeProject.repo_url}</a>
@@ -430,29 +477,6 @@ export default function DashboardPage() {
                   <span className="text-slate-400">—</span>
                 )}
               </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="text-xs feego-muted">Ramas</div>
-              <div className="mt-2 space-y-1">
-                {(activeProject.branches || []).length === 0 ? <div className="text-sm text-slate-400">—</div> : null}
-                {(activeProject.branches || []).map((b, i) => (
-                  <div key={i} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-white/5 border border-white/10">
-                    <div className="font-mono text-sm">{b.name}</div>
-                    <div className="text-xs text-slate-300">{b.purpose || ''}</div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="text-xs feego-muted">Políticas</div>
-              <Pre text={activeProject.policies_md || '—'} />
-            </Card>
-
-            <Card className="p-4">
-              <div className="text-xs feego-muted">Notas</div>
-              <Pre text={activeProject.notes_md || '—'} />
             </Card>
           </div>
         )}

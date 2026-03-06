@@ -62,6 +62,35 @@ function contextPathForKey(key) {
   return full;
 }
 
+function contextKeyForProjectSlug(slug) {
+  if (!slug) return null;
+  if (slug === 'altezza') return 'altezza';
+  if (slug === 'mako') return 'mako';
+  if (slug === 'feego') return 'feego';
+  if (slug === 'sisproind') return 'sisproind';
+  if (slug === 'mercypersonalizados') return 'mercypersonalizados';
+  if (slug === 'comopreparar') return 'comopreparar';
+  return null;
+}
+
+function extractPendientes(md) {
+  const text = String(md || '');
+  const lines = text.split(/\n/);
+  let inPend = false;
+  const items = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^#\s+Pendientes\b/.test(l.trim())) { inPend = true; continue; }
+    if (inPend && /^#\s+/.test(l.trim())) break;
+    if (!inPend) continue;
+    const m = l.match(/\[(PENDIENTE|COMPROBAR)\]\s*(.+)$/i);
+    if (m) items.push({ tag: m[1].toUpperCase(), text: m[2].trim() });
+    else if (l.trim().startsWith('- ')) items.push({ tag: 'ITEM', text: l.trim().slice(2).trim() });
+  }
+  return items;
+}
+
+
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const pool = mariadb.createPool({
@@ -1627,10 +1656,22 @@ app.get('/api/infra/projects', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     const rows = await conn.query('SELECT slug, name, status, repo_url, domains_json, branches_json, policies_md, notes_md FROM infra_projects ORDER BY name ASC');
-    const projects = (rows || []).map((r) => {
-      let domains=[]; let branches=[];
+
+    const projects = await Promise.all((rows || []).map(async (r) => {
+      let domains = []; let branches = [];
       try { domains = r.domains_json ? JSON.parse(r.domains_json) : []; } catch (e) {}
       try { branches = r.branches_json ? JSON.parse(r.branches_json) : []; } catch (e) {}
+
+      let pending_count = 0;
+      try {
+        const key = contextKeyForProjectSlug(r.slug);
+        const full = contextPathForKey(key);
+        if (full) {
+          const md = await fs.promises.readFile(full, 'utf8');
+          pending_count = extractPendientes(md).length;
+        }
+      } catch (e) {}
+
       return {
         slug: r.slug,
         name: r.name,
@@ -1641,8 +1682,10 @@ app.get('/api/infra/projects', requireAuth, async (req, res) => {
         policies_md: r.policies_md || '',
         notes_md: r.notes_md || '',
         logo_url: '/api/public/infra-icons/' + r.slug,
+        pending_count,
       };
-    });
+    }));
+
     res.json({ ok: true, projects });
   } catch (e) {
     res.status(500).json({ ok: false });
@@ -1680,6 +1723,25 @@ app.get('/api/infra/projects/:slug', requireAuth, async (req, res) => {
     res.status(500).json({ ok: false });
   } finally {
     if (conn) conn.release();
+  }
+});
+
+
+// Project context markdown (source of truth)
+app.get('/api/infra/projects/:slug/md', requireAuth, async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').trim();
+    const key = contextKeyForProjectSlug(slug);
+    const full = contextPathForKey(key);
+    if (!full) return res.status(404).json({ ok: false, error: 'no_md' });
+    const st = await fs.promises.stat(full);
+    if (st.size > CONTEXT_MAX_BYTES) return res.status(413).json({ ok: false, error: 'file_too_large', size: st.size });
+    const content = await fs.promises.readFile(full, 'utf8');
+    const pendientes = extractPendientes(content);
+    res.json({ ok: true, slug, path: full, mtimeMs: st.mtimeMs, size: st.size, content, pendientes });
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return res.status(404).json({ ok: false, error: 'not_found' });
+    res.status(500).json({ ok: false, error: 'read_failed' });
   }
 });
 
