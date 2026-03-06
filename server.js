@@ -32,6 +32,10 @@ function getDataRoot() {
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/root/.openclaw/workspace/uploads/andres/inbox';
 const MAX_FILE_MB = process.env.MAX_FILE_MB ? Number(process.env.MAX_FILE_MB) : 2048;
 
+// Canonical runbook/context file for the VPS (editable from dashboard)
+const VPS_MD_PATH = process.env.VPS_MD_PATH || '/root/.openclaw/workspace/memory/vps.md';
+const VPS_MD_MAX_BYTES = process.env.VPS_MD_MAX_BYTES ? Number(process.env.VPS_MD_MAX_BYTES) : 400_000; // ~400KB
+
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const pool = mariadb.createPool({
@@ -1463,6 +1467,44 @@ app.get('/api/status', requireAuth, (req, res) => {
   const memStr = (used / 1024 / 1024 / 1024).toFixed(1) + 'Gi usados / ' + (total / 1024 / 1024 / 1024).toFixed(1) + 'Gi total (' + pct + '%)';
   const load = os.loadavg().map(x => x.toFixed(2)).join(', ');
   res.json({ hostname: os.hostname(), uptime: Math.round(os.uptime() / 60) + 'm', mem: memStr, load });
+});
+
+// VPS runbook/context (vps.md)
+app.get('/api/vps-md', requireAuth, async (req, res) => {
+  try {
+    const st = await fs.promises.stat(VPS_MD_PATH);
+    if (st.size > VPS_MD_MAX_BYTES) return res.status(413).json({ ok: false, error: 'file_too_large', size: st.size });
+    const content = await fs.promises.readFile(VPS_MD_PATH, 'utf8');
+    res.json({ ok: true, path: VPS_MD_PATH, mtimeMs: st.mtimeMs, size: st.size, content });
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return res.status(404).json({ ok: false, error: 'not_found' });
+    res.status(500).json({ ok: false, error: 'read_failed' });
+  }
+});
+
+app.put('/api/vps-md', requireAuth, async (req, res) => {
+  try {
+    const content = (req.body && typeof req.body.content === 'string') ? req.body.content : null;
+    if (content === null) return res.status(400).json({ ok: false, error: 'missing_content' });
+    const bytes = Buffer.byteLength(content, 'utf8');
+    if (bytes > VPS_MD_MAX_BYTES) return res.status(413).json({ ok: false, error: 'content_too_large', size: bytes });
+
+    // Backup (best-effort)
+    try {
+      const dir = path.dirname(VPS_MD_PATH);
+      const base = path.basename(VPS_MD_PATH, path.extname(VPS_MD_PATH));
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const backup = path.join(dir, base + '.bak-' + ts + '.md');
+      await fs.promises.copyFile(VPS_MD_PATH, backup);
+    } catch (e) {}
+
+    await fs.promises.mkdir(path.dirname(VPS_MD_PATH), { recursive: true });
+    await fs.promises.writeFile(VPS_MD_PATH, content, 'utf8');
+    const st = await fs.promises.stat(VPS_MD_PATH);
+    res.json({ ok: true, path: VPS_MD_PATH, mtimeMs: st.mtimeMs, size: st.size });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'write_failed' });
+  }
 });
 
 // System overview (read-only)

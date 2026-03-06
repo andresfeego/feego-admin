@@ -33,10 +33,25 @@ function Pre({ text }) {
   )
 }
 
+function bytesHuman(n) {
+  if (n === null || n === undefined) return '—'
+  const u = ['B','KB','MB','GB','TB']
+  let i=0
+  let v=Number(n)
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++ }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${u[i]}`
+}
+
 export default function DashboardPage() {
   const [st, setSt] = React.useState(null)
   const [ov, setOv] = React.useState(null)
   const [err, setErr] = React.useState(null)
+
+  const [vpsLoading, setVpsLoading] = React.useState(false)
+  const [vpsSaving, setVpsSaving] = React.useState(false)
+  const [vpsDirty, setVpsDirty] = React.useState(false)
+  const [vpsMeta, setVpsMeta] = React.useState(null)
+  const [vpsText, setVpsText] = React.useState('')
 
   async function refresh() {
     setErr(null)
@@ -128,6 +143,83 @@ export default function DashboardPage() {
               <div className="text-xs text-slate-300">{c.notAfter}</div>
             </div>
           ))}
+        </div>
+      </Section>
+
+      <Section title="VPS.md (runbook)">
+        <div className="text-sm text-slate-300">
+          Contexto canónico del VPS (dominios, migraciones, puertos, servicios y runbooks).
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
+            onClick={async () => {
+              try {
+                setErr(null)
+                setVpsLoading(true)
+                const r = await api('/api/vps-md')
+                if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error : ('HTTP ' + r.status))
+                setVpsMeta({ path: r.data.path, size: r.data.size, mtimeMs: r.data.mtimeMs })
+                setVpsText(r.data.content || '')
+                setVpsDirty(false)
+              } catch (e) {
+                setErr(String(e && e.message ? e.message : e))
+              } finally {
+                setVpsLoading(false)
+              }
+            }}
+            disabled={vpsLoading || vpsSaving}
+          >
+            {vpsLoading ? 'Cargando…' : 'Cargar'}
+          </button>
+          <button
+            className="px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-100"
+            onClick={async () => {
+              try {
+                setErr(null)
+                setVpsSaving(true)
+                const r = await api('/api/vps-md', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ content: vpsText }),
+                })
+                if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error : ('HTTP ' + r.status))
+                setVpsMeta({ path: r.data.path, size: r.data.size, mtimeMs: r.data.mtimeMs })
+                setVpsDirty(false)
+              } catch (e) {
+                setErr(String(e && e.message ? e.message : e))
+              } finally {
+                setVpsSaving(false)
+              }
+            }}
+            disabled={vpsSaving || vpsLoading || !vpsDirty}
+          >
+            {vpsSaving ? 'Guardando…' : 'Guardar'}
+          </button>
+          {vpsMeta ? (
+            <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2">
+              <span className="font-mono">{vpsMeta.path}</span>
+              <span>·</span>
+              <span>{bytesHuman(vpsMeta.size)}</span>
+              <span>·</span>
+              <span>{vpsMeta.mtimeMs ? new Date(vpsMeta.mtimeMs).toLocaleString() : '—'}</span>
+              <span>·</span>
+              <span>{vpsDirty ? 'cambios sin guardar' : 'ok'}</span>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-3">
+          <textarea
+            value={vpsText}
+            onChange={(e) => {
+              setVpsText(e.target.value)
+              setVpsDirty(true)
+            }}
+            className="w-full min-h-[55vh] p-3 rounded-xl bg-black/30 border border-white/10 font-mono text-xs leading-5"
+            placeholder="Pulsa Cargar para traer vps.md…"
+            spellCheck={false}
+          />
         </div>
       </Section>
 
