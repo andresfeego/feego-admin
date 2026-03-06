@@ -137,12 +137,13 @@ html[data-theme="light"] .feego-calendar .react-calendar__tile:enabled:hover {
 /* (time is shown in modal only) */
 
 /* green intensity levels based on hours (0..12h) */
-.feego-cal.level-0 { background: transparent; }
+.feego-cal.level-0 { background: #ffffff; }
 .feego-cal.level-1 { background: color-mix(in srgb, #22c55e, transparent 88%); }
 .feego-cal.level-2 { background: color-mix(in srgb, #22c55e, transparent 75%); }
 .feego-cal.level-3 { background: color-mix(in srgb, #22c55e, transparent 60%); }
 .feego-cal.level-4 { background: color-mix(in srgb, #22c55e, transparent 45%); }
 
+html[data-theme="dark"] .feego-cal.level-0 { background: #ffffff; }
 html[data-theme="dark"] .feego-cal.level-1 { background: color-mix(in srgb, #22c55e, transparent 92%); }
 html[data-theme="dark"] .feego-cal.level-2 { background: color-mix(in srgb, #22c55e, transparent 82%); }
 html[data-theme="dark"] .feego-cal.level-3 { background: color-mix(in srgb, #22c55e, transparent 70%); }

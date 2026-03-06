@@ -234,6 +234,52 @@ function formatMinutes(mins) {
   return `${h} h ${r} min`
 }
 
+
+function DonutRing({ data, total, colors, size = 96, stroke = 10, gapDeg = 2 }) {
+  const entries = Object.entries(data || {}).filter(([, v]) => Number(v) > 0)
+  const sum = total || entries.reduce((a, [, v]) => a + Number(v || 0), 0)
+
+  const cx = size / 2
+  const cy = size / 2
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+
+  const gap = (gapDeg / 360) * circ
+
+  let offset = 0
+  const segs = entries.map(([k, v]) => {
+    const frac = sum ? Number(v) / sum : 0
+    const len = Math.max(0, frac * circ - gap)
+    const dash = String(len) + ' ' + String(circ - len)
+    const col = (colors && colors[k]) || makeHashColor(k)
+    const seg = { k, dash, offset, col }
+    offset += frac * circ
+    return seg
+  })
+
+  return (
+    <svg width={size} height={size} viewBox={'0 0 ' + size + ' ' + size}>
+      <circle cx={cx} cy={cy} r={r} stroke="rgba(255,255,255,0.12)" strokeWidth={stroke} fill="none" />
+      <g transform={'rotate(-90 ' + cx + ' ' + cy + ')'}>
+        {segs.map((s) => (
+          <circle
+            key={s.k}
+            cx={cx}
+            cy={cy}
+            r={r}
+            stroke={s.col}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            fill="none"
+            strokeDasharray={s.dash}
+            strokeDashoffset={-s.offset}
+          />
+        ))}
+      </g>
+    </svg>
+  )
+}
+
 function makeHashColor(key) {
   const s = String(key || '')
   let h = 0
