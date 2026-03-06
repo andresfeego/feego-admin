@@ -207,7 +207,7 @@ function ProjectCard({ p, onClick }) {
         </div>
         <div className="mt-3 text-xs text-slate-300 space-y-1">
           {(p.domains || []).slice(0, 3).map((d) => (
-            <div key={d} className="font-mono truncate">{d}</div>
+            <a key={d} className="font-mono truncate underline text-slate-200 hover:text-white" href={(d.startsWith('http://') || d.startsWith('https://')) ? d : ('https://' + d)} target="_blank" rel="noreferrer">{d}</a>
           ))}
           {(p.domains || []).length > 3 ? <div className="text-slate-400">+{(p.domains || []).length - 3} más</div> : null}
         </div>
@@ -222,6 +222,7 @@ export default function DashboardPage() {
   const [err, setErr] = React.useState(null)
 
   const [infraProjects, setInfraProjects] = React.useState([])
+  const [projectsLoading, setProjectsLoading] = React.useState(false)
   const [activeProject, setActiveProject] = React.useState(null)
   const [activeProjectMd, setActiveProjectMd] = React.useState(null)
   const [activeProjectMdLoading, setActiveProjectMdLoading] = React.useState(false)
@@ -250,8 +251,24 @@ export default function DashboardPage() {
     if (r2.ok) setOv(r2.data)
     else setErr(r2.error || 'No se pudo cargar overview')
 
+    setProjectsLoading(true)
     const r3 = await api('/api/infra/projects')
-    if (r3.ok) setInfraProjects(r3.data.projects || [])
+    if (r3.ok) {
+      const base = r3.data.projects || []
+      // Enrich each card from its .md (fresh) so pending_count updates immediately after edits
+      const enriched = await Promise.all(base.map(async (proj) => {
+        try {
+          const rmd = await api('/api/infra/projects/' + encodeURIComponent(proj.slug) + '/md')
+          if (rmd.ok) {
+            const pendientes = (rmd.data && rmd.data.pendientes) ? rmd.data.pendientes : []
+            return { ...proj, pending_count: pendientes.length }
+          }
+        } catch {}
+        return proj
+      }))
+      setInfraProjects(enriched)
+    }
+    setProjectsLoading(false)
   }
 
   React.useEffect(() => {
@@ -429,7 +446,8 @@ export default function DashboardPage() {
       </Section>
 
       <Section title="Proyectos">
-        {(infraProjects || []).length === 0 ? <div className="text-sm text-slate-400">No hay proyectos registrados.</div> : null}
+        {projectsLoading ? <div className="text-sm text-slate-400">Cargando proyectos…</div> : null}
+        {!projectsLoading && (infraProjects || []).length === 0 ? <div className="text-sm text-slate-400">No hay proyectos registrados.</div> : null}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {(infraProjects || []).map((p) => (
             <ProjectCard key={p.slug} p={p} onClick={async () => {
