@@ -205,9 +205,14 @@ function ProjectCard({ p, onClick }) {
             </div>
           ) : null}
         </div>
-        <div className="mt-3 text-xs text-slate-300 space-y-1">
+        <div className="mt-3 text-xs text-slate-300 flex flex-col gap-1">
           {(p.domains || []).slice(0, 3).map((d) => (
-            <a key={d} className="font-mono truncate underline text-slate-200 hover:text-white" href={(d.startsWith('http://') || d.startsWith('https://')) ? d : ('https://' + d)} target="_blank" rel="noreferrer">{d}</a>
+            <a key={d} className="font-mono truncate text-slate-200 hover:text-white" href={(d.startsWith('http://') || d.startsWith('https://')) ? d : ('https://' + d)} target="_blank" rel="noreferrer">
+              <span className="inline-flex items-center gap-1">
+                <span className="text-slate-400">↗</span>
+                <span>{d}</span>
+              </span>
+            </a>
           ))}
           {(p.domains || []).length > 3 ? <div className="text-slate-400">+{(p.domains || []).length - 3} más</div> : null}
         </div>
