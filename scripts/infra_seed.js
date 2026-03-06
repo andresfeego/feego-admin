@@ -130,6 +130,9 @@ async function main() {
   let conn;
   try {
     conn = await pool.getConnection();
+    const keepSlugs = PROJECTS.map(p => p.slug);
+    await conn.query('DELETE FROM infra_projects WHERE slug NOT IN (' + keepSlugs.map(()=>'?').join(',') + ')', keepSlugs);
+
     for (const p of PROJECTS) {
       await ensureIcon(p.slug, p.domains);
 
