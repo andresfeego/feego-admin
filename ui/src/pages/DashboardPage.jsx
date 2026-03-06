@@ -159,6 +159,25 @@ function Modal({ open, onClose, title, children }) {
   )
 }
 
+function parseMdSections(md) {
+  const text = String(md || '')
+  const lines = text.split(/\n/)
+  const sections = []
+  let current = null
+  for (const line of lines) {
+    const m = line.match(/^#\s+(.+)\s*$/)
+    if (m) {
+      if (current) sections.push(current)
+      current = { title: m[1].trim(), body: '' }
+      continue
+    }
+    if (!current) continue
+    current.body += (current.body ? '\n' : '') + line
+  }
+  if (current) sections.push(current)
+  return sections
+}
+
 function ProjectCard({ p, onClick }) {
   const statusColor =
     p.status === 'migrated'
@@ -455,8 +474,25 @@ export default function DashboardPage() {
             </Card>
 
             <Card className="p-4">
-              <div className="text-xs feego-muted">Detalle (Markdown completo)</div>
-              <pre className="mt-2 text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto max-h-[520px] whitespace-pre-wrap">{activeProjectMd && activeProjectMd.content ? activeProjectMd.content : '—'}</pre>
+              <div className="text-xs feego-muted">Detalle (por secciones)</div>
+              {activeProjectMd && activeProjectMd.content ? (
+                <div className="mt-3 space-y-2">
+                  {parseMdSections(activeProjectMd.content).map((s, i) => (
+                    <details key={i} className="group rounded-xl border border-white/10 bg-white/5">
+                      <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="font-bold">{s.title}</div>
+                        <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
+                        <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+                      </summary>
+                      <div className="px-4 pb-4">
+                        <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-slate-400">—</div>
+              )}
             </Card>
 
             <Card className="p-4">
