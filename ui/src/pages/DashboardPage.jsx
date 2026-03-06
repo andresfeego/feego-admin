@@ -372,44 +372,27 @@ export default function DashboardPage() {
         </div>
       </Section>
 
-<Modal open={!!activeProject}onClose={() => { setActiveProject(null); setActiveProjectMd(null) }} title={activeProject ? activeProject.name : ''}>
+      <Modal open={!!activeProject} onClose={() => { setActiveProject(null); setActiveProjectMd(null); setActiveProjectRules(null) }} title={activeProject ? activeProject.name : ''}>
         {!activeProject ? null : (
           <div className="space-y-4">
             <Card className="p-4">
-              <div className="text-xs feego-muted">Fuente</div>
-              <div className="mt-2 text-sm text-slate-300">.md del proyecto (si existe) + metadata DB para cards.</div>
-              {activeProjectMd && activeProjectMd.path ? <div className="mt-2 text-xs text-slate-400 font-mono">{activeProjectMd.path}</div> : null}
-              {activeProjectMdLoading ? <div className="mt-2 text-xs text-slate-400">Cargando .md…</div> : null}
+              <div className="text-xs feego-muted">GitHub</div>
+              <div className="mt-2 text-sm">
+                {activeProject.repo_url ? (
+                  <a className="underline" href={activeProject.repo_url} target="_blank" rel="noreferrer">{activeProject.repo_url}</a>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </div>
             </Card>
 
             <Card className="p-4">
-              <div className="text-xs feego-muted">Reglas de diseño (repo) — leyendo desde LAB</div>
-              {activeProject && activeProject.slug === 'altezza' ? (
-                <div className="mt-2">
-                  {activeProjectRulesLoading ? <div className="text-sm text-slate-400">Cargando reglas…</div> : null}
-                  {activeProjectRules && activeProjectRules.path ? <div className="text-xs text-slate-400 font-mono">{activeProjectRules.path}</div> : null}
-                  {activeProjectRules && activeProjectRules.content ? (
-                    <div className="mt-3 space-y-2">
-                      {parseMdSections(activeProjectRules.content).map((s, i) => (
-                        <details key={i} className="group rounded-xl border border-white/10 bg-white/5">
-                          <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
-                            <div className="font-bold">{s.title}</div>
-                            <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
-                            <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
-                          </summary>
-                          <div className="px-4 pb-4">
-                            <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
-                          </div>
-                        </details>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-slate-400">—</div>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-2 text-sm text-slate-400">(No configurado)</div>
-              )}
+              <div className="text-xs feego-muted">Dominios</div>
+              <div className="mt-2 space-y-1">
+                {(activeProject.domains || []).map((d) => (
+                  <div key={d} className="font-mono text-sm">{d}</div>
+                ))}
+              </div>
             </Card>
 
             <Card className="p-4">
@@ -430,6 +413,7 @@ export default function DashboardPage() {
 
             <Card className="p-4">
               <div className="text-xs feego-muted">Detalle (por secciones)</div>
+              {activeProjectMdLoading ? <div className="mt-2 text-sm text-slate-400">Cargando .md…</div> : null}
               {activeProjectMd && activeProjectMd.content ? (
                 <div className="mt-3 space-y-2">
                   {parseMdSections(activeProjectMd.content).map((s, i) => (
@@ -451,27 +435,34 @@ export default function DashboardPage() {
             </Card>
 
             <Card className="p-4">
-              <div className="text-xs feego-muted">Dominios (DB)</div>
-              <div className="mt-2 space-y-1">
-                {(activeProject.domains || []).map((d) => (
-                  <div key={d} className="font-mono text-sm">{d}</div>
-                ))}
-              </div>
-            </Card>
+              <div className="text-xs feego-muted">Reglas de diseño (repo)</div>
+              <div className="mt-1 text-xs text-slate-400">Fuente: checkout LAB en el VPS (cuando exista).</div>
+              {activeProjectRulesLoading ? <div className="mt-2 text-sm text-slate-400">Cargando reglas…</div> : null}
+              {activeProjectRules && activeProjectRules.path ? <div className="mt-2 text-xs text-slate-400 font-mono">{activeProjectRules.path}</div> : null}
 
-            <Card className="p-4">
-              <div className="text-xs feego-muted">GitHub (DB)</div>
-              <div className="mt-2 text-sm">
-                {activeProject.repo_url ? (
-                  <a className="underline" href={activeProject.repo_url} target="_blank" rel="noreferrer">{activeProject.repo_url}</a>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </div>
+              {activeProjectRules && activeProjectRules.content ? (
+                <div className="mt-3 space-y-2">
+                  {parseMdSections(activeProjectRules.content).map((s, i) => (
+                    <details key={i} className="group rounded-xl border border-white/10 bg-white/5">
+                      <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="font-bold">{s.title}</div>
+                        <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
+                        <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+                      </summary>
+                      <div className="px-4 pb-4">
+                        <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-slate-400">Por definir.</div>
+              )}
             </Card>
           </div>
         )}
       </Modal>
+
 
       <Section title="Contexto (VPS / Proyectos)">
         <div className="text-sm text-slate-300">
