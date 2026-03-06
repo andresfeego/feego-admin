@@ -231,6 +231,8 @@ export default function DashboardPage() {
   const [activeProject, setActiveProject] = React.useState(null)
   const [activeProjectMd, setActiveProjectMd] = React.useState(null)
   const [activeProjectMdLoading, setActiveProjectMdLoading] = React.useState(false)
+  const [activeProjectRules, setActiveProjectRules] = React.useState(null)
+  const [activeProjectRulesLoading, setActiveProjectRulesLoading] = React.useState(false)
 
   const [ctxFiles, setCtxFiles] = React.useState([])
   const [ctxKey, setCtxKey] = React.useState('vps')
@@ -347,10 +349,20 @@ export default function DashboardPage() {
             <ProjectCard key={p.slug} p={p} onClick={async () => {
               setActiveProject(p)
               setActiveProjectMd(null)
+              setActiveProjectRules(null)
               try {
                 setActiveProjectMdLoading(true)
                 const r = await api('/api/infra/projects/' + encodeURIComponent(p.slug) + '/md')
                 if (r.ok) setActiveProjectMd(r.data)
+                if (p.slug === 'altezza') {
+                  try {
+                    setActiveProjectRulesLoading(true)
+                    const rr = await api('/api/infra/projects/' + encodeURIComponent(p.slug) + '/design-rules')
+                    if (rr.ok) setActiveProjectRules(rr.data)
+                  } finally {
+                    setActiveProjectRulesLoading(false)
+                  }
+                }
               } finally {
                 setActiveProjectMdLoading(false)
               }
@@ -368,6 +380,36 @@ export default function DashboardPage() {
               <div className="mt-2 text-sm text-slate-300">.md del proyecto (si existe) + metadata DB para cards.</div>
               {activeProjectMd && activeProjectMd.path ? <div className="mt-2 text-xs text-slate-400 font-mono">{activeProjectMd.path}</div> : null}
               {activeProjectMdLoading ? <div className="mt-2 text-xs text-slate-400">Cargando .md…</div> : null}
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Reglas de diseño (repo) — leyendo desde LAB</div>
+              {activeProject && activeProject.slug === 'altezza' ? (
+                <div className="mt-2">
+                  {activeProjectRulesLoading ? <div className="text-sm text-slate-400">Cargando reglas…</div> : null}
+                  {activeProjectRules && activeProjectRules.path ? <div className="text-xs text-slate-400 font-mono">{activeProjectRules.path}</div> : null}
+                  {activeProjectRules && activeProjectRules.content ? (
+                    <div className="mt-3 space-y-2">
+                      {parseMdSections(activeProjectRules.content).map((s, i) => (
+                        <details key={i} className="group rounded-xl border border-white/10 bg-white/5">
+                          <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
+                            <div className="font-bold">{s.title}</div>
+                            <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
+                            <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+                          </summary>
+                          <div className="px-4 pb-4">
+                            <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-400">—</div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-slate-400">(No configurado)</div>
+              )}
             </Card>
 
             <Card className="p-4">

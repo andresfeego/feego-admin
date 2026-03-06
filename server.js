@@ -73,6 +73,12 @@ function contextKeyForProjectSlug(slug) {
   return null;
 }
 
+function designRulesPathForProjectSlug(slug) {
+  // For now: only Altezza (Mievento) is supported
+  if (slug === 'altezza') return '/opt/stacks/mievento/lab/app/docs/design/RULES.md';
+  return null;
+}
+
 function extractPendientes(md) {
   const text = String(md || '');
   const lines = text.split(/\n/);
@@ -1744,6 +1750,23 @@ app.get('/api/infra/projects/:slug/md', requireAuth, async (req, res) => {
     res.status(500).json({ ok: false, error: 'read_failed' });
   }
 });
+
+// Project design rules (read from LAB checkout)
+app.get('/api/infra/projects/:slug/design-rules', requireAuth, async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').trim();
+    const full = designRulesPathForProjectSlug(slug);
+    if (!full) return res.status(404).json({ ok: false, error: 'no_rules' });
+    const st = await fs.promises.stat(full);
+    if (st.size > CONTEXT_MAX_BYTES) return res.status(413).json({ ok: false, error: 'file_too_large', size: st.size });
+    const content = await fs.promises.readFile(full, 'utf8');
+    res.json({ ok: true, slug, source: 'lab', path: full, mtimeMs: st.mtimeMs, size: st.size, content });
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return res.status(404).json({ ok: false, error: 'not_found' });
+    res.status(500).json({ ok: false, error: 'read_failed' });
+  }
+});
+
 
 // System overview (read-only)
 app.get('/api/system/overview', requireAuth, async (req, res) => {
