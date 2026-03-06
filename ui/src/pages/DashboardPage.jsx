@@ -609,6 +609,15 @@ export default function DashboardPage() {
                   }}
                   calendarType="iso8601"
                   showNeighboringMonth={false}
+                  tileClassName={({ date, view }) => {
+                    if (view !== 'month') return null
+                    const day = date.toISOString().slice(0, 10)
+                    const rec = (activitySummary.days || []).find((x) => x.day === day)
+                    const minutes = rec ? rec.minutes_total : 0
+                    const hours = minutes / 60
+                    const level = Math.max(0, Math.min(4, Math.floor((Math.min(hours, 12) / 12) * 4)))
+                    return 'feego-cal level-' + level
+                  }}
                   onClickDay={async (date) => {
                     const day = date.toISOString().slice(0, 10)
                     try {
@@ -631,8 +640,7 @@ export default function DashboardPage() {
                     const hols = hd.isHoliday(date)
                     const holidayName = Array.isArray(hols) && hols.length ? hols[0].name : null
                     return (
-                      <div className="relative w-full h-full">
-                        <div className="feego-cal-daynum">{String(date.getDate())}</div>
+                      <div className="w-full h-full">
                         {holidayName ? (
                           <div className="feego-cal-holiday" title={holidayName}>
                             {holidayName}

@@ -121,3 +121,29 @@ html[data-theme="light"] .feego-calendar .react-calendar__tile:enabled:hover {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Put the built-in day label (abbr) in the top-right and style it */
+.feego-calendar .react-calendar__tile abbr {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--feego-text), transparent 25%);
+  text-decoration: none;
+}
+
+/* time label */
+/* (time is shown in modal only) */
+
+/* green intensity levels based on hours (0..12h) */
+.feego-cal.level-0 { background: transparent; }
+.feego-cal.level-1 { background: color-mix(in srgb, #22c55e, transparent 88%); }
+.feego-cal.level-2 { background: color-mix(in srgb, #22c55e, transparent 75%); }
+.feego-cal.level-3 { background: color-mix(in srgb, #22c55e, transparent 60%); }
+.feego-cal.level-4 { background: color-mix(in srgb, #22c55e, transparent 45%); }
+
+html[data-theme="dark"] .feego-cal.level-1 { background: color-mix(in srgb, #22c55e, transparent 92%); }
+html[data-theme="dark"] .feego-cal.level-2 { background: color-mix(in srgb, #22c55e, transparent 82%); }
+html[data-theme="dark"] .feego-cal.level-3 { background: color-mix(in srgb, #22c55e, transparent 70%); }
+html[data-theme="dark"] .feego-cal.level-4 { background: color-mix(in srgb, #22c55e, transparent 55%); }
