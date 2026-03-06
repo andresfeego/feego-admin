@@ -1,4 +1,7 @@
 import React from 'react'
+import Calendar from 'react-calendar'
+import 'react-calendar/dist/Calendar.css'
+import Holidays from 'date-holidays'
 import { api } from '../lib/api'
 import { Card } from '../components/ui.jsx'
 
@@ -291,6 +294,7 @@ export default function DashboardPage() {
   const [activityRecomputing, setActivityRecomputing] = React.useState(false)
   const [activityDay, setActivityDay] = React.useState(null)
   const [activityDayOpen, setActivityDayOpen] = React.useState(false)
+  const [activityActiveDate, setActivityActiveDate] = React.useState(new Date())
   const [activeProject, setActiveProject] = React.useState(null)
   const [activeProjectMd, setActiveProjectMd] = React.useState(null)
   const [activeProjectMdLoading, setActiveProjectMdLoading] = React.useState(false)
@@ -588,40 +592,72 @@ export default function DashboardPage() {
           ) : null}
 
           {!activityLoading && activitySummary && (activitySummary.days || []).length ? (
-            <div className="grid grid-cols-7 gap-2">
-              {(activitySummary.days || []).slice(-35).map((d) => {
-                const m = d.minutes_total || 0
-                const level =
-                  m === 0
-                    ? 'bg-white/5'
-                    : m < 30
-                      ? 'bg-emerald-500/15'
-                      : m < 120
-                        ? 'bg-emerald-500/25'
-                        : m < 300
-                          ? 'bg-emerald-500/40'
-                          : 'bg-emerald-500/60'
-                return (
-                  <button
-                    key={d.day}
-                    className={
-                      'h-12 rounded-lg ' + level + ' border border-white/10 hover:border-white/30 flex items-start justify-start px-2 py-1 text-[11px] font-mono text-white/80'
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-200 font-bold">
+                  {activityActiveDate.toLocaleString('es-CO', { month: 'long', year: 'numeric' })}
+                </div>
+                <div className="text-xs text-slate-400">Semana inicia: lunes</div>
+              </div>
+
+              <div className="mt-3">
+                <Calendar
+                  value={activityActiveDate}
+                  onActiveStartDateChange={({ activeStartDate }) => {
+                    if (activeStartDate) setActivityActiveDate(activeStartDate)
+                  }}
+                  calendarType="iso8601"
+                  showNeighboringMonth={false}
+                  onClickDay={async (date) => {
+                    const day = date.toISOString().slice(0, 10)
+                    try {
+                      const rd = await api('/api/infra/activity/day?day=' + encodeURIComponent(day))
+                      if (rd.ok) {
+                        setActivityDay(rd.data)
+                        setActivityDayOpen(true)
+                      } else {
+                        setActivityDay({ day, minutes_total: 0, byProject: {}, source: 'none' })
+                        setActivityDayOpen(true)
+                      }
+                    } catch {
+                      setActivityDay({ day, minutes_total: 0, byProject: {}, source: 'none' })
+                      setActivityDayOpen(true)
                     }
-                    title={d.day + ' · ' + m + ' min · ' + d.source}
-                    onClick={async () => {
-                      try {
-                        const rd = await api('/api/infra/activity/day?day=' + encodeURIComponent(d.day))
-                        if (rd.ok) {
-                          setActivityDay(rd.data)
-                          setActivityDayOpen(true)
-                        }
-                      } catch {}
-                    }}
-                  >
-                    {d.day.split('-')[2]}
-                  </button>
-                )
-              })}
+                  }}
+                  tileContent={({ date, view }) => {
+                    if (view !== 'month') return null
+                    const day = date.toISOString().slice(0, 10)
+                    const rec = (activitySummary.days || []).find((x) => x.day === day)
+                    const minutes = rec ? rec.minutes_total : 0
+
+                    const hd = new Holidays('CO')
+                    const hols = hd.isHoliday(date)
+                    const holidayName = Array.isArray(hols) && hols.length ? hols[0].name : null
+
+                    const colors = Object.fromEntries(
+                      (infraProjects || []).map((p) => [p.slug, p.color_hex || null]).filter(([, c]) => c)
+                    )
+
+                    return (
+                      <div className="relative w-full h-full">
+                        <div className="absolute top-1 right-2 text-[11px] font-mono text-white/80">{String(date.getDate())}</div>
+
+                        <div className="absolute left-2 bottom-2">
+                          <Pie data={rec ? rec.byProject : {}} total={minutes} colors={colors} />
+                        </div>
+
+                        <div className="absolute left-2 top-1 text-[11px] text-slate-300">{formatMinutes(minutes)}</div>
+
+                        {holidayName ? (
+                          <div className="absolute right-2 bottom-2 text-[10px] text-amber-200 max-w-[130px] text-right leading-3" title={holidayName}>
+                            {holidayName}
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  }}
+                />
+              </div>
             </div>
           ) : null}
         </div>
