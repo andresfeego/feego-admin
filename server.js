@@ -1733,6 +1733,69 @@ app.get('/api/infra/projects/:slug', requireAuth, async (req, res) => {
 });
 
 
+// Infra activity (calendar)
+app.get('/api/infra/activity/summary', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    const meta = await conn.query("SELECT value FROM infra_activity_meta WHERE `key`='last_computed_at' LIMIT 1");
+    const rows = await conn.query('SELECT day, minutes_total, minutes_by_project_json, source FROM infra_activity_daily ORDER BY day ASC');
+    const days = rows.map((r) => {
+      let byProject = {};
+      try {
+        byProject = r.minutes_by_project_json ? JSON.parse(r.minutes_by_project_json) : {};
+      } catch (e) {}
+      return {
+        day: new Date(r.day).toISOString().slice(0, 10),
+        minutes_total: r.minutes_total,
+        byProject,
+        source: r.source,
+      };
+    });
+    res.json({ ok: true, last_computed_at: meta[0] ? meta[0].value : null, days });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.get('/api/infra/activity/day', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const day = String(req.query.day || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+    conn = await pool.getConnection();
+    const rows = await conn.query(
+      'SELECT day, minutes_total, minutes_by_project_json, source, events_count, updated_at FROM infra_activity_daily WHERE day=? LIMIT 1',
+      [day],
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
+    const r = rows[0];
+    let byProject = {};
+    try {
+      byProject = r.minutes_by_project_json ? JSON.parse(r.minutes_by_project_json) : {};
+    } catch (e) {}
+    res.json({ ok: true, day, minutes_total: r.minutes_total, byProject, source: r.source, events_count: r.events_count, updated_at: r.updated_at });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.post('/api/infra/activity/recompute', requireAuth, async (req, res) => {
+  try {
+    // Run recompute script (fast enough for manual refresh)
+    const { execSync } = require('child_process');
+    execSync('node scripts/recompute_activity.js', { cwd: '/opt/feego-admin', stdio: 'ignore', timeout: 60_000 });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  }
+});
+
+
 // Project context markdown (source of truth)
 app.get('/api/infra/projects/:slug/md', requireAuth, async (req, res) => {
   try {

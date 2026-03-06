@@ -228,6 +228,12 @@ export default function DashboardPage() {
 
   const [infraProjects, setInfraProjects] = React.useState([])
   const [projectsLoading, setProjectsLoading] = React.useState(false)
+
+  const [activitySummary, setActivitySummary] = React.useState(null)
+  const [activityLoading, setActivityLoading] = React.useState(false)
+  const [activityRecomputing, setActivityRecomputing] = React.useState(false)
+  const [activityDay, setActivityDay] = React.useState(null)
+  const [activityDayOpen, setActivityDayOpen] = React.useState(false)
   const [activeProject, setActiveProject] = React.useState(null)
   const [activeProjectMd, setActiveProjectMd] = React.useState(null)
   const [activeProjectMdLoading, setActiveProjectMdLoading] = React.useState(false)
@@ -285,6 +291,15 @@ export default function DashboardPage() {
   React.useEffect(() => {
     refreshStats()
     refreshProjects({ showOverlay: false })
+    ;(async () => {
+      try {
+        setActivityLoading(true)
+        const ra = await api('/api/infra/activity/summary')
+        if (ra.ok) setActivitySummary(ra.data)
+      } finally {
+        setActivityLoading(false)
+      }
+    })()
     const t = setInterval(refreshStats, 10_000)
     return () => clearInterval(t)
   }, [])
@@ -464,7 +479,128 @@ export default function DashboardPage() {
       </Modal>
 
 
-      <Section title="Contexto (VPS / Proyectos)">
+            <Section title="Actividad">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-slate-300">
+            Bitácora (chat histórico + comandos OpenClaw). Última actualización:{' '}
+            <span className="font-mono text-xs text-slate-200">
+              {activitySummary && activitySummary.last_computed_at ? activitySummary.last_computed_at : '—'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
+              onClick={async () => {
+                try {
+                  setActivityLoading(true)
+                  const ra = await api('/api/infra/activity/summary')
+                  if (ra.ok) setActivitySummary(ra.data)
+                } finally {
+                  setActivityLoading(false)
+                }
+              }}
+              disabled={activityLoading || activityRecomputing}
+            >
+              Refrescar
+            </button>
+            <button
+              className="px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-100"
+              onClick={async () => {
+                try {
+                  setActivityRecomputing(true)
+                  const rr = await api('/api/infra/activity/recompute', { method: 'POST' })
+                  if (rr.ok) {
+                    const ra = await api('/api/infra/activity/summary')
+                    if (ra.ok) setActivitySummary(ra.data)
+                  }
+                } finally {
+                  setActivityRecomputing(false)
+                }
+              }}
+              disabled={activityLoading || activityRecomputing}
+            >
+              {activityRecomputing ? 'Actualizando…' : 'Actualizar (recalcular)'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {activityLoading ? <div className="text-sm text-slate-400">Cargando actividad…</div> : null}
+          {!activityLoading && (!activitySummary || !(activitySummary.days || []).length) ? (
+            <div className="text-sm text-slate-400">—</div>
+          ) : null}
+
+          {!activityLoading && activitySummary && (activitySummary.days || []).length ? (
+            <div className="grid grid-cols-[repeat(14,minmax(0,1fr))] gap-1">
+              {(activitySummary.days || []).slice(-98).map((d) => {
+                const m = d.minutes_total || 0
+                const level =
+                  m === 0
+                    ? 'bg-white/5'
+                    : m < 30
+                      ? 'bg-emerald-500/15'
+                      : m < 120
+                        ? 'bg-emerald-500/25'
+                        : m < 300
+                          ? 'bg-emerald-500/40'
+                          : 'bg-emerald-500/60'
+                return (
+                  <button
+                    key={d.day}
+                    className={
+                      'h-5 rounded ' +
+                      level +
+                      ' border border-white/10 hover:border-white/30'
+                    }
+                    title={d.day + ' · ' + m + ' min · ' + d.source}
+                    onClick={async () => {
+                      try {
+                        const rd = await api('/api/infra/activity/day?day=' + encodeURIComponent(d.day))
+                        if (rd.ok) {
+                          setActivityDay(rd.data)
+                          setActivityDayOpen(true)
+                        }
+                      } catch {}
+                    }}
+                  />
+                )
+              })}
+            </div>
+          ) : null}
+        </div>
+
+        <Modal open={activityDayOpen} onClose={() => setActivityDayOpen(false)} title={activityDay ? 'Actividad ' + activityDay.day : 'Actividad'}>
+          {!activityDay ? null : (
+            <div className="space-y-4">
+              <Card className="p-4">
+                <div className="text-xs feego-muted">Resumen</div>
+                <div className="mt-2 text-sm text-slate-200">
+                  {activityDay.minutes_total} minutos · fuente: <span className="font-mono">{activityDay.source}</span>
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <div className="text-xs feego-muted">Por proyecto (aprox)</div>
+                <div className="mt-3 space-y-2">
+                  {Object.entries(activityDay.byProject || {})
+                    .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+                    .map(([k, v]) => {
+                      const pct = activityDay.minutes_total ? Math.round((v / activityDay.minutes_total) * 100) : 0
+                      return (
+                        <div key={k} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-white/5 border border-white/10">
+                          <div className="font-mono text-sm">{k}</div>
+                          <div className="text-xs text-slate-200">{v} min · {pct}%</div>
+                        </div>
+                      )
+                    })}
+                </div>
+              </Card>
+            </div>
+          )}
+        </Modal>
+      </Section>
+
+<Section title="Contexto (VPS / Proyectos)">
         <div className="text-sm text-slate-300">
           Edita los documentos de contexto del VPS por archivo (sin mezclar todo en uno).
         </div>
