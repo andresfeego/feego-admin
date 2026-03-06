@@ -143,6 +143,14 @@ export default function DashboardPage() {
   const [ov, setOv] = React.useState(null)
   const [err, setErr] = React.useState(null)
 
+  const [ctxFiles, setCtxFiles] = React.useState([])
+  const [ctxKey, setCtxKey] = React.useState('vps')
+  const [ctxText, setCtxText] = React.useState('')
+  const [ctxMeta, setCtxMeta] = React.useState(null)
+  const [ctxLoading, setCtxLoading] = React.useState(false)
+  const [ctxSaving, setCtxSaving] = React.useState(false)
+  const [ctxDirty, setCtxDirty] = React.useState(false)
+
   const [vpsLoading, setVpsLoading] = React.useState(false)
   const [vpsSaving, setVpsSaving] = React.useState(false)
   const [vpsDirty, setVpsDirty] = React.useState(false)
@@ -164,6 +172,15 @@ export default function DashboardPage() {
     refresh()
     const t = setInterval(refresh, 10_000)
     return () => clearInterval(t)
+  }, [])
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const r = await api('/api/context/files')
+        if (r.ok) setCtxFiles(r.data.files || [])
+      } catch {}
+    })()
   }, [])
 
   const uptimeHuman = (sec) => {
@@ -198,6 +215,132 @@ export default function DashboardPage() {
         <Tile title="Uptime" value={ov ? uptimeHuman(ov.uptimeSec) : '…'} sub={ov ? ov.now : ''} />
         <Tile title="IP pública" value={ov ? (ov.publicIp || '—') : '…'} />
       </div>
+
+
+      <Section title="Contexto (VPS / Proyectos)">
+        <div className="text-sm text-slate-300">
+          Edita los documentos de contexto del VPS por archivo (sin mezclar todo en uno).
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-3 rounded-xl border border-white/10 bg-white/5">
+            <div className="text-xs feego-muted">Archivos</div>
+            <div className="mt-2 space-y-1">
+              {(ctxFiles || []).length === 0 ? <div className="text-xs text-slate-400">(vacío)</div> : null}
+              {(ctxFiles || []).map((f) => (
+                <button
+                  key={f.key}
+                  onClick={async () => {
+                    try {
+                      setErr(null)
+                      setCtxKey(f.key)
+                      setCtxLoading(true)
+                      const r = await api('/api/context/file?key=' + encodeURIComponent(f.key))
+                      if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error : ('HTTP ' + r.status))
+                      setCtxText(r.data.content || '')
+                      setCtxMeta({ key: f.key, label: r.data.label, path: r.data.path, size: r.data.size, mtimeMs: r.data.mtimeMs })
+                      setCtxDirty(false)
+                    } catch (e) {
+                      setErr(String(e && e.message ? e.message : e))
+                    } finally {
+                      setCtxLoading(false)
+                    }
+                  }}
+                  className={
+                    'w-full text-left px-3 py-2 rounded-lg border transition-colors ' +
+                    (ctxKey === f.key ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-white/10 bg-black/20 hover:bg-white/5')
+                  }
+                >
+                  <div className="text-sm font-bold">{f.label}</div>
+                  <div className="text-[11px] text-slate-400 font-mono">{f.rel}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 p-3 rounded-xl border border-white/10 bg-white/5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs feego-muted">Editor</div>
+                <div className="text-[11px] text-slate-400">
+                  {ctxMeta ? (
+                    <span className="font-mono">{ctxMeta.path}</span>
+                  ) : (
+                    <span>Selecciona un archivo</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
+                  onClick={async () => {
+                    try {
+                      setErr(null)
+                      setCtxLoading(true)
+                      const r = await api('/api/context/file?key=' + encodeURIComponent(ctxKey))
+                      if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error : ('HTTP ' + r.status))
+                      setCtxText(r.data.content || '')
+                      setCtxMeta({ key: ctxKey, label: r.data.label, path: r.data.path, size: r.data.size, mtimeMs: r.data.mtimeMs })
+                      setCtxDirty(false)
+                    } catch (e) {
+                      setErr(String(e && e.message ? e.message : e))
+                    } finally {
+                      setCtxLoading(false)
+                    }
+                  }}
+                  disabled={ctxLoading || ctxSaving}
+                >
+                  {ctxLoading ? 'Cargando…' : 'Recargar'}
+                </button>
+
+                <button
+                  className="px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-100"
+                  onClick={async () => {
+                    try {
+                      setErr(null)
+                      setCtxSaving(true)
+                      const r = await api('/api/context/file?key=' + encodeURIComponent(ctxKey), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: ctxText }),
+                      })
+                      if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error : ('HTTP ' + r.status))
+                      setCtxMeta({ key: ctxKey, label: r.data.label, path: r.data.path, size: r.data.size, mtimeMs: r.data.mtimeMs })
+                      setCtxDirty(false)
+                    } catch (e) {
+                      setErr(String(e && e.message ? e.message : e))
+                    } finally {
+                      setCtxSaving(false)
+                    }
+                  }}
+                  disabled={ctxSaving || ctxLoading || !ctxDirty}
+                >
+                  {ctxSaving ? 'Guardando…' : 'Guardar'}
+                </button>
+
+                <div className="text-[11px] text-slate-400">
+                  {ctxDirty ? 'cambios sin guardar' : 'ok'}
+                  {ctxMeta ? ' · ' + bytesHuman(ctxMeta.size) : ''}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <textarea
+                value={ctxText}
+                onChange={(e) => {
+                  setCtxText(e.target.value)
+                  setCtxDirty(true)
+                }}
+                className="w-full min-h-[42vh] p-3 rounded-xl bg-black/30 border border-white/10 font-mono text-xs leading-5"
+                placeholder="Selecciona un archivo a la izquierda…"
+                spellCheck={false}
+              />
+            </div>
+          </div>
+        </div>
+      </Section>
 
       <Section title="Servicios">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

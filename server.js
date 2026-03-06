@@ -36,6 +36,29 @@ const MAX_FILE_MB = process.env.MAX_FILE_MB ? Number(process.env.MAX_FILE_MB) : 
 const VPS_MD_PATH = process.env.VPS_MD_PATH || '/root/.openclaw/workspace/memory/vps.md';
 const VPS_MD_MAX_BYTES = process.env.VPS_MD_MAX_BYTES ? Number(process.env.VPS_MD_MAX_BYTES) : 400_000; // ~400KB
 
+
+// Context docs (editable from dashboard)
+const CONTEXT_ROOT = process.env.CONTEXT_ROOT || '/root/.openclaw/workspace/context';
+const CONTEXT_MAX_BYTES = process.env.CONTEXT_MAX_BYTES ? Number(process.env.CONTEXT_MAX_BYTES) : 500_000; // ~500KB per file
+const CONTEXT_FILES = {
+  vps: { label: 'VPS', rel: 'VPS.md' },
+  mako: { label: 'Mako', rel: 'proyectos/mako.md' },
+  altezza: { label: 'Altezza', rel: 'proyectos/altezza.md' },
+  feego: { label: 'Feego', rel: 'proyectos/feego.md' },
+  sisproind: { label: 'Sisproind', rel: 'proyectos/sisproind.md' },
+  mercypersonalizados: { label: 'Mercy Personalizados', rel: 'proyectos/mercypersonalizados.md' },
+  comopreparar: { label: 'ComoPreparar', rel: 'proyectos/comopreparar.md' },
+};
+function contextPathForKey(key) {
+  const spec = CONTEXT_FILES[key];
+  if (!spec) return null;
+  const full = path.resolve(CONTEXT_ROOT, spec.rel);
+  // ensure within root
+  const root = path.resolve(CONTEXT_ROOT) + path.sep;
+  if (!full.startsWith(root)) return null;
+  return full;
+}
+
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const pool = mariadb.createPool({
@@ -1502,6 +1525,59 @@ app.put('/api/vps-md', requireAuth, async (req, res) => {
     await fs.promises.writeFile(VPS_MD_PATH, content, 'utf8');
     const st = await fs.promises.stat(VPS_MD_PATH);
     res.json({ ok: true, path: VPS_MD_PATH, mtimeMs: st.mtimeMs, size: st.size });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'write_failed' });
+  }
+});
+
+
+// Context docs API
+app.get('/api/context/files', requireAuth, (req, res) => {
+  const files = Object.entries(CONTEXT_FILES).map(([key, v]) => ({ key, label: v.label, rel: v.rel }));
+  res.json({ ok: true, root: CONTEXT_ROOT, files });
+});
+
+app.get('/api/context/file', requireAuth, async (req, res) => {
+  try {
+    const key = String(req.query.key || '').trim();
+    const full = contextPathForKey(key);
+    if (!full) return res.status(400).json({ ok: false, error: 'bad_key' });
+    const st = await fs.promises.stat(full);
+    if (st.size > CONTEXT_MAX_BYTES) return res.status(413).json({ ok: false, error: 'file_too_large', size: st.size });
+    const content = await fs.promises.readFile(full, 'utf8');
+    res.json({ ok: true, key, path: full, rel: CONTEXT_FILES[key].rel, label: CONTEXT_FILES[key].label, mtimeMs: st.mtimeMs, size: st.size, content });
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return res.status(404).json({ ok: false, error: 'not_found' });
+    res.status(500).json({ ok: false, error: 'read_failed' });
+  }
+});
+
+app.put('/api/context/file', requireAuth, async (req, res) => {
+  try {
+    const key = String(req.query.key || '').trim();
+    const full = contextPathForKey(key);
+    if (!full) return res.status(400).json({ ok: false, error: 'bad_key' });
+
+    const content = (req.body && typeof req.body.content === 'string') ? req.body.content : null;
+    if (content === null) return res.status(400).json({ ok: false, error: 'missing_content' });
+
+    const bytes = Buffer.byteLength(content, 'utf8');
+    if (bytes > CONTEXT_MAX_BYTES) return res.status(413).json({ ok: false, error: 'content_too_large', size: bytes });
+
+    await fs.promises.mkdir(path.dirname(full), { recursive: true });
+
+    // backup best-effort
+    try {
+      const dir = path.dirname(full);
+      const base = path.basename(full, path.extname(full));
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const backup = path.join(dir, base + '.bak-' + ts + '.md');
+      await fs.promises.copyFile(full, backup);
+    } catch (e) {}
+
+    await fs.promises.writeFile(full, content, 'utf8');
+    const st = await fs.promises.stat(full);
+    res.json({ ok: true, key, path: full, rel: CONTEXT_FILES[key].rel, label: CONTEXT_FILES[key].label, mtimeMs: st.mtimeMs, size: st.size });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'write_failed' });
   }
