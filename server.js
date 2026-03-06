@@ -1661,7 +1661,7 @@ app.get('/api/infra/projects', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    const rows = await conn.query('SELECT slug, name, status, repo_url, domains_json, branches_json, policies_md, notes_md FROM infra_projects ORDER BY name ASC');
+    const rows = await conn.query('SELECT slug, name, status, repo_url, domains_json, branches_json, policies_md, notes_md, color_hex FROM infra_projects ORDER BY name ASC');
 
     const projects = await Promise.all((rows || []).map(async (r) => {
       let domains = []; let branches = [];
@@ -1688,6 +1688,7 @@ app.get('/api/infra/projects', requireAuth, async (req, res) => {
         policies_md: r.policies_md || '',
         notes_md: r.notes_md || '',
         logo_url: '/api/public/infra-icons/' + r.slug,
+        color_hex: r.color_hex || null,
         pending_count,
       };
     }));
@@ -1705,7 +1706,7 @@ app.get('/api/infra/projects/:slug', requireAuth, async (req, res) => {
   try {
     const slug = String(req.params.slug || '');
     conn = await pool.getConnection();
-    const rows = await conn.query('SELECT slug, name, status, repo_url, domains_json, branches_json, policies_md, notes_md FROM infra_projects WHERE slug=? LIMIT 1', [slug]);
+    const rows = await conn.query('SELECT slug, name, status, repo_url, domains_json, branches_json, policies_md, notes_md, color_hex FROM infra_projects WHERE slug=? LIMIT 1', [slug]);
     if (!rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
     const r = rows[0];
     let domains=[]; let branches=[];
@@ -1723,6 +1724,7 @@ app.get('/api/infra/projects/:slug', requireAuth, async (req, res) => {
         policies_md: r.policies_md || '',
         notes_md: r.notes_md || '',
         logo_url: '/api/public/infra-icons/' + r.slug,
+        color_hex: r.color_hex || null,
       }
     });
   } catch (e) {
