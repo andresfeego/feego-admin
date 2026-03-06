@@ -608,7 +608,7 @@ export default function DashboardPage() {
                     if (activeStartDate) setActivityActiveDate(activeStartDate)
                   }}
                   calendarType="iso8601"
-                  showNeighboringMonth={false}
+                  showNeighboringMonth={true}
                   tileClassName={({ date, view }) => {
                     if (view !== 'month') return null
                     const day = date.toISOString().slice(0, 10)

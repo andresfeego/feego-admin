@@ -147,3 +147,11 @@ html[data-theme="dark"] .feego-cal.level-1 { background: color-mix(in srgb, #22c
 html[data-theme="dark"] .feego-cal.level-2 { background: color-mix(in srgb, #22c55e, transparent 82%); }
 html[data-theme="dark"] .feego-cal.level-3 { background: color-mix(in srgb, #22c55e, transparent 70%); }
 html[data-theme="dark"] .feego-cal.level-4 { background: color-mix(in srgb, #22c55e, transparent 55%); }
+
+/* Ensure uniform cell sizing (override react-calendar defaults) */
+.feego-calendar * { box-sizing: border-box; }
+.feego-calendar .react-calendar__tile {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: none !important;
+}
