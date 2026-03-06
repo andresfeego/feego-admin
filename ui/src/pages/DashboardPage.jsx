@@ -138,10 +138,65 @@ function buildStatusSectionMd(m) {
     '- servicio backend (proxy `3020/8443`) — falta documentar nombre, repo, dominios y runbook',
   ].filter(Boolean).join('\n')
 }
+
+function Modal({ open, onClose, title, children }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[9999]">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="absolute inset-0 p-4 md:p-10 flex items-start justify-center overflow-auto">
+        <Card className="w-full max-w-3xl p-5 md:p-6 relative">
+          <div className="flex items-start justify-between gap-4">
+            <div className="text-xl font-bold">{title}</div>
+            <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={onClose}>
+              Cerrar
+            </button>
+          </div>
+          <div className="mt-4">{children}</div>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+function ProjectCard({ p, onClick }) {
+  const statusColor =
+    p.status === 'migrated'
+      ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/25'
+      : p.status === 'pending'
+        ? 'bg-amber-500/15 text-amber-200 border-amber-500/25'
+        : 'bg-sky-500/15 text-sky-200 border-sky-500/25'
+
+  return (
+    <button onClick={onClick} className="text-left group">
+      <Card className="p-4 hover:bg-white/10 transition-colors">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 overflow-hidden flex items-center justify-center">
+            {p.logo_url ? <img src={p.logo_url} alt={p.name} className="w-full h-full object-contain" /> : <div className="text-xs text-slate-400">—</div>}
+          </div>
+          <div className="min-w-0">
+            <div className="font-bold truncate">{p.name}</div>
+            <div className={'mt-1 inline-flex items-center px-2 py-0.5 text-[11px] rounded-full border ' + statusColor}>{p.status}</div>
+          </div>
+        </div>
+        <div className="mt-3 text-xs text-slate-300 space-y-1">
+          {(p.domains || []).slice(0, 3).map((d) => (
+            <div key={d} className="font-mono truncate">{d}</div>
+          ))}
+          {(p.domains || []).length > 3 ? <div className="text-slate-400">+{(p.domains || []).length - 3} más</div> : null}
+        </div>
+      </Card>
+    </button>
+  )
+}
+
 export default function DashboardPage() {
   const [st, setSt] = React.useState(null)
   const [ov, setOv] = React.useState(null)
   const [err, setErr] = React.useState(null)
+
+  const [infraProjects, setInfraProjects] = React.useState([])
+  const [activeProject, setActiveProject] = React.useState(null)
 
   const [ctxFiles, setCtxFiles] = React.useState([])
   const [ctxKey, setCtxKey] = React.useState('vps')
@@ -166,6 +221,9 @@ export default function DashboardPage() {
     const r2 = await api('/api/system/overview')
     if (r2.ok) setOv(r2.data)
     else setErr(r2.error || 'No se pudo cargar overview')
+
+    const r3 = await api('/api/infra/projects')
+    if (r3.ok) setInfraProjects(r3.data.projects || [])
   }
 
   React.useEffect(() => {
@@ -341,6 +399,64 @@ export default function DashboardPage() {
           </div>
         </div>
       </Section>
+
+      <Section title="Proyectos">
+        {(infraProjects || []).length === 0 ? <div className="text-sm text-slate-400">No hay proyectos registrados.</div> : null}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {(infraProjects || []).map((p) => (
+            <ProjectCard key={p.slug} p={p} onClick={() => setActiveProject(p)} />
+          ))}
+        </div>
+      </Section>
+
+      <Modal open={!!activeProject} onClose={() => setActiveProject(null)} title={activeProject ? activeProject.name : ''}>
+        {!activeProject ? null : (
+          <div className="space-y-4">
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Dominios</div>
+              <div className="mt-2 space-y-1">
+                {(activeProject.domains || []).map((d) => (
+                  <div key={d} className="font-mono text-sm">{d}</div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">GitHub</div>
+              <div className="mt-2 text-sm">
+                {activeProject.repo_url ? (
+                  <a className="underline" href={activeProject.repo_url} target="_blank" rel="noreferrer">{activeProject.repo_url}</a>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Ramas</div>
+              <div className="mt-2 space-y-1">
+                {(activeProject.branches || []).length === 0 ? <div className="text-sm text-slate-400">—</div> : null}
+                {(activeProject.branches || []).map((b, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="font-mono text-sm">{b.name}</div>
+                    <div className="text-xs text-slate-300">{b.purpose || ''}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Políticas</div>
+              <Pre text={activeProject.policies_md || '—'} />
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Notas</div>
+              <Pre text={activeProject.notes_md || '—'} />
+            </Card>
+          </div>
+        )}
+      </Modal>
 
       <Section title="Servicios">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

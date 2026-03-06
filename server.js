@@ -28,6 +28,9 @@ function getDataRoot() {
   return process.env.FEEGO_DATA_ROOT || path.resolve(process.cwd(), 'data');
 }
 
+const INFRA_ICONS_DIR = path.join(getDataRoot(), 'infra-icons');
+fs.mkdirSync(INFRA_ICONS_DIR, { recursive: true });
+
 // TEMP: large limit while migrating sites
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/root/.openclaw/workspace/uploads/andres/inbox';
 const MAX_FILE_MB = process.env.MAX_FILE_MB ? Number(process.env.MAX_FILE_MB) : 2048;
@@ -1405,6 +1408,22 @@ app.get('/api/branding/logo', requireAuth, async (req, res) => {
   }
 });
 
+
+// Public infra icons
+app.get('/api/public/infra-icons/:slug', async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').replace(/[^a-z0-9_-]/gi, '');
+    const file = path.join(INFRA_ICONS_DIR, slug + '.png');
+    const st = await fs.promises.stat(file);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Length', String(st.size));
+    res.setHeader('Cache-Control', 'no-store');
+    fs.createReadStream(file).pipe(res);
+  } catch (e) {
+    res.status(404).end();
+  }
+});
+
 app.get('/api/public/branding/logo', async (req, res) => {
   try {
     const { logoFile } = getBrandingPaths();
@@ -1599,6 +1618,68 @@ app.put('/api/context/file', requireAuth, async (req, res) => {
     res.json({ ok: true, key, path: full, rel: CONTEXT_FILES[key].rel, label: CONTEXT_FILES[key].label, mtimeMs: st.mtimeMs, size: st.size });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'write_failed' });
+  }
+});
+
+// Infra projects (dashboard)
+app.get('/api/infra/projects', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    const rows = await conn.query('SELECT slug, name, status, repo_url, domains_json, branches_json, policies_md, notes_md FROM infra_projects ORDER BY name ASC');
+    const projects = (rows || []).map((r) => {
+      let domains=[]; let branches=[];
+      try { domains = r.domains_json ? JSON.parse(r.domains_json) : []; } catch (e) {}
+      try { branches = r.branches_json ? JSON.parse(r.branches_json) : []; } catch (e) {}
+      return {
+        slug: r.slug,
+        name: r.name,
+        status: r.status,
+        repo_url: r.repo_url || null,
+        domains,
+        branches,
+        policies_md: r.policies_md || '',
+        notes_md: r.notes_md || '',
+        logo_url: '/api/public/infra-icons/' + r.slug,
+      };
+    });
+    res.json({ ok: true, projects });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.get('/api/infra/projects/:slug', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const slug = String(req.params.slug || '');
+    conn = await pool.getConnection();
+    const rows = await conn.query('SELECT slug, name, status, repo_url, domains_json, branches_json, policies_md, notes_md FROM infra_projects WHERE slug=? LIMIT 1', [slug]);
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
+    const r = rows[0];
+    let domains=[]; let branches=[];
+    try { domains = r.domains_json ? JSON.parse(r.domains_json) : []; } catch (e) {}
+    try { branches = r.branches_json ? JSON.parse(r.branches_json) : []; } catch (e) {}
+    res.json({
+      ok: true,
+      project: {
+        slug: r.slug,
+        name: r.name,
+        status: r.status,
+        repo_url: r.repo_url || null,
+        domains,
+        branches,
+        policies_md: r.policies_md || '',
+        notes_md: r.notes_md || '',
+        logo_url: '/api/public/infra-icons/' + r.slug,
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
