@@ -614,8 +614,17 @@ export default function DashboardPage() {
                     const day = date.toISOString().slice(0, 10)
                     const rec = (activitySummary.days || []).find((x) => x.day === day)
                     const minutes = rec ? rec.minutes_total : 0
-                    const hours = minutes / 60
-                    const level = Math.max(0, Math.min(4, Math.floor((Math.min(hours, 12) / 12) * 4)))
+                    // GitHub-like discrete intensity (minutes)
+                    // level-0: 0
+                    // level-1: 1..59
+                    // level-2: 60..179
+                    // level-3: 180..359
+                    // level-4: 360+ (6h+)  (cap at 12h in meaning, but level stays 4)
+                    let level = 0
+                    if (minutes > 0 && minutes < 60) level = 1
+                    else if (minutes < 180) level = 2
+                    else if (minutes < 360) level = 3
+                    else level = 4
                     return 'feego-cal level-' + level
                   }}
                   onClickDay={async (date) => {
@@ -675,7 +684,7 @@ export default function DashboardPage() {
                       return (
                         <div key={k} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-white/5 border border-white/10">
                           <div className="font-mono text-sm">{k}</div>
-                          <div className="text-xs text-slate-200">{v} min · {pct}%</div>
+                          <div className="text-xs text-slate-200">{pct}% · {formatMinutes(v)}</div>
                         </div>
                       )
                     })}
