@@ -42,6 +42,102 @@ function bytesHuman(n) {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${u[i]}`
 }
 
+
+
+function mdSectionReplace(md, header, newBody) {
+  const lines = String(md || '').split(/\n/)
+  const startIdx = lines.findIndex((l) => l.trim() === header.trim())
+  if (startIdx === -1) return null
+
+  let endIdx = lines.length
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (/^##\s+/.test(lines[i])) { endIdx = i; break }
+  }
+
+  const before = lines.slice(0, startIdx).join('\n')
+  const after = lines.slice(endIdx).join('\n')
+  const body = [header, '', newBody.trimEnd(), '', ''].join('\n')
+  return [before.trimEnd(), body, after.trimStart()].filter(Boolean).join('\n') + '\n'
+}
+
+function parseVpsMd(md) {
+  const text = String(md || '')
+  const out = {
+    migrated: { makoLabUrl: 'https://lab-mako.mako.guru', makoProdUrl: 'https://mako.guru' },
+    mievento: { labBackendName: 'backend-altezza', labPort: '3022', prodProxyUrl: 'feegosystem.com/proxyPassthrough.php?path=/api/responseAltezza' },
+    sisproind: {
+      prodService: 'backend-sisproind', prodPort: '3021', prodDb: 'feegosys_sisproind', prodDataRoot: '/srv/sisproind/plataforma',
+      labService: 'backend-sisproind-lab', labPort: '3031', labDb: 'feegosys_sisproind_lab', labDataRoot: '/srv/sisproind/plataforma-lab',
+    },
+    mako: {
+      backendLabPort: '3032', backendLabDb: 'feegosys_mako_lab', backendProdPort: '3033', backendProdDb: 'feegosys_mako_prod',
+      frontLabPort: '3102', frontProdPort: '3103',
+      notes: 'scrAppServer servido estático en cada ambiente y Next/Image unoptimized para eliminar URLs legacy.',
+    },
+    pending: { otherLines: '' },
+  }
+
+  function pick(re, fallback) {
+    const m = text.match(re)
+    return m && m[1] ? String(m[1]).trim() : fallback
+  }
+
+  out.migrated.makoLabUrl = pick(/LAB:\s*(https?:\/\/[^\s)]+)/i, out.migrated.makoLabUrl)
+  out.migrated.makoProdUrl = pick(/PROD:\s*(https?:\/\/[^\s)]+)/i, out.migrated.makoProdUrl)
+  out.mievento.labBackendName = pick(/LAB\s*→\s*([^\n(]+)/i, out.mievento.labBackendName)
+  out.mievento.labPort = pick(/\((\d{2,5})\)\s*✅/i, out.mievento.labPort)
+  out.mievento.prodProxyUrl = pick(/proxy\s+([^\s]+proxyPassthrough\.php[^\s]+)/i, out.mievento.prodProxyUrl)
+  out.sisproind.prodPort = pick(/PROD[^\n]*?:\s*(\d{2,5}),\s*DB\s*`feegosys_sisproind`/i, out.sisproind.prodPort)
+  out.sisproind.labPort = pick(/LAB[^\n]*?:\s*(\d{2,5}),\s*DB\s*`feegosys_sisproind_lab`/i, out.sisproind.labPort)
+  out.mako.backendLabPort = pick(/LAB\s*(\d{2,5})\s*→\s*DB\s*`feegosys_mako_lab`/i, out.mako.backendLabPort)
+  out.mako.backendProdPort = pick(/PROD\s*(\d{2,5})\s*→\s*DB\s*`feegosys_mako_prod`/i, out.mako.backendProdPort)
+  out.mako.frontLabPort = pick(/Front:[\s\S]*?LAB\s*(\d{2,5})/i, out.mako.frontLabPort)
+  out.mako.frontProdPort = pick(/Front:[\s\S]*?PROD\s*(\d{2,5})/i, out.mako.frontProdPort)
+
+  return out
+}
+
+function buildStatusSectionMd(m) {
+  const labUrl = (m && m.migrated && m.migrated.makoLabUrl) ? m.migrated.makoLabUrl : 'https://lab-mako.mako.guru'
+  const prodUrl = (m && m.migrated && m.migrated.makoProdUrl) ? m.migrated.makoProdUrl : 'https://mako.guru'
+  return [
+    '> Regla operativa: **Wipi NO modifica PROD directo**. Solo LAB; a PROD pasa por **PR** revisado por Andres.',
+    '',
+    '### Migrados (en VPS)',
+    '- `comopreparar.co` (WordPress)',
+    '- `altezzaeventos.in` (WordPress)',
+    '- `mievento.altezzaeventos.in` (Next.js)',
+    '- `feegoadmin` (Node) — expuesto en `https://admin.feegosystem.com/administracion/`',
+    '- `mercypersonalizados.com` (WordPress)',
+    '- `sisproind.com` (WordPress)',
+    '- `mako` (backend + frontend)',
+    '  - LAB: `' + labUrl + '`',
+    '  - PROD: `' + prodUrl + '` (+ `www`)',
+    '',
+    '### Detalle rápido por proyecto',
+    '',
+    '**Mievento**',
+    '- LAB → ' + (m?.mievento?.labBackendName || 'backend-altezza') + ' (' + (m?.mievento?.labPort || '3022') + ') ✅',
+    '- PROD → aún usa proxy `' + (m?.mievento?.prodProxyUrl || 'feegosystem.com/proxyPassthrough.php?path=/api/responseAltezza') + '` ⏳',
+    '',
+    '**SISPROIND**',
+    '- PROD ' + (m?.sisproind?.prodService || 'backend-sisproind') + ': ' + (m?.sisproind?.prodPort || '3021') + ', DB `' + (m?.sisproind?.prodDb || 'feegosys_sisproind') + '`, data root `' + (m?.sisproind?.prodDataRoot || '/srv/sisproind/plataforma') + '`',
+    '- LAB ' + (m?.sisproind?.labService || 'backend-sisproind-lab') + ': ' + (m?.sisproind?.labPort || '3031') + ', DB `' + (m?.sisproind?.labDb || 'feegosys_sisproind_lab') + '`, data root `' + (m?.sisproind?.labDataRoot || '/srv/sisproind/plataforma-lab') + '`',
+    '',
+    '**MAKO**',
+    '- Backend:',
+    '  - LAB ' + (m?.mako?.backendLabPort || '3032') + ' → DB `' + (m?.mako?.backendLabDb || 'feegosys_mako_lab') + '`',
+    '  - PROD ' + (m?.mako?.backendProdPort || '3033') + ' → DB `' + (m?.mako?.backendProdDb || 'feegosys_mako_prod') + '`',
+    '- Front:',
+    '  - LAB ' + (m?.mako?.frontLabPort || '3102'),
+    '  - PROD ' + (m?.mako?.frontProdPort || '3103'),
+    '- ' + (m?.mako?.notes || 'scrAppServer servido estático en cada ambiente y Next/Image unoptimized para eliminar URLs legacy.'),
+    '',
+    '### Pendientes',
+    '- Backend/API de Altezza (Node, actualmente en cPanel)',
+    '- servicio backend (proxy `3020/8443`) — falta documentar nombre, repo, dominios y runbook',
+  ].filter(Boolean).join('\n')
+}
 export default function DashboardPage() {
   const [st, setSt] = React.useState(null)
   const [ov, setOv] = React.useState(null)
@@ -52,6 +148,7 @@ export default function DashboardPage() {
   const [vpsDirty, setVpsDirty] = React.useState(false)
   const [vpsMeta, setVpsMeta] = React.useState(null)
   const [vpsText, setVpsText] = React.useState('')
+  const [vpsModel, setVpsModel] = React.useState(parseVpsMd(''))
 
   async function refresh() {
     setErr(null)
@@ -148,8 +245,9 @@ export default function DashboardPage() {
 
       <Section title="VPS.md (runbook)">
         <div className="text-sm text-slate-300">
-          Contexto canónico del VPS (dominios, migraciones, puertos, servicios y runbooks).
+          Editor estructurado (acordeones por proyecto). Al guardar, se re-genera el bloque de <span className="font-mono">Status de migraciones</span> en el Markdown.
         </div>
+
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
@@ -160,7 +258,9 @@ export default function DashboardPage() {
                 const r = await api('/api/vps-md')
                 if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error : ('HTTP ' + r.status))
                 setVpsMeta({ path: r.data.path, size: r.data.size, mtimeMs: r.data.mtimeMs })
-                setVpsText(r.data.content || '')
+                const raw = r.data.content || ''
+                setVpsText(raw)
+                setVpsModel(parseVpsMd(raw))
                 setVpsDirty(false)
               } catch (e) {
                 setErr(String(e && e.message ? e.message : e))
@@ -172,19 +272,34 @@ export default function DashboardPage() {
           >
             {vpsLoading ? 'Cargando…' : 'Cargar'}
           </button>
+
           <button
             className="px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-100"
             onClick={async () => {
               try {
                 setErr(null)
                 setVpsSaving(true)
+
+                const statusBody = buildStatusSectionMd(vpsModel)
+                const replaced = mdSectionReplace(vpsText, '## Status de migraciones (canonical)', statusBody)
+                const nextMd = replaced || [
+                  String(vpsText || '').trimEnd(),
+                  '',
+                  '## Status de migraciones (canonical)',
+                  '',
+                  statusBody,
+                  '',
+                ].join('\n')
+
                 const r = await api('/api/vps-md', {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ content: vpsText }),
+                  body: JSON.stringify({ content: nextMd }),
                 })
                 if (!r.ok) throw new Error(r.data && r.data.error ? r.data.error : ('HTTP ' + r.status))
+
                 setVpsMeta({ path: r.data.path, size: r.data.size, mtimeMs: r.data.mtimeMs })
+                setVpsText(nextMd)
                 setVpsDirty(false)
               } catch (e) {
                 setErr(String(e && e.message ? e.message : e))
@@ -196,6 +311,7 @@ export default function DashboardPage() {
           >
             {vpsSaving ? 'Guardando…' : 'Guardar'}
           </button>
+
           {vpsMeta ? (
             <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2">
               <span className="font-mono">{vpsMeta.path}</span>
@@ -209,17 +325,145 @@ export default function DashboardPage() {
           ) : null}
         </div>
 
-        <div className="mt-3">
-          <textarea
-            value={vpsText}
-            onChange={(e) => {
-              setVpsText(e.target.value)
-              setVpsDirty(true)
-            }}
-            className="w-full min-h-[55vh] p-3 rounded-xl bg-black/30 border border-white/10 font-mono text-xs leading-5"
-            placeholder="Pulsa Cargar para traer vps.md…"
-            spellCheck={false}
-          />
+        <div className="mt-4 space-y-3">
+          <div className="p-4 rounded-xl border border-white/10 bg-white/5">
+            <div className="text-xs feego-muted">MAKO (URLs)</div>
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-slate-400">LAB URL</div>
+                <input
+                  value={vpsModel?.migrated?.makoLabUrl || ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setVpsModel((m) => ({ ...m, migrated: { ...m.migrated, makoLabUrl: v } }))
+                    setVpsDirty(true)
+                  }}
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">PROD URL</div>
+                <input
+                  value={vpsModel?.migrated?.makoProdUrl || ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setVpsModel((m) => ({ ...m, migrated: { ...m.migrated, makoProdUrl: v } }))
+                    setVpsDirty(true)
+                  }}
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          <details className="group p-4 rounded-xl border border-white/10 bg-white/5">
+            <summary className="cursor-pointer select-none flex items-center justify-between">
+              <div>
+                <div className="font-bold">Mievento</div>
+                <div className="text-xs text-slate-400">LAB backend/puerto + proxy PROD</div>
+              </div>
+              <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
+              <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+            </summary>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-slate-400">LAB backend</div>
+                <input value={vpsModel?.mievento?.labBackendName || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, labBackendName:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">LAB puerto</div>
+                <input value={vpsModel?.mievento?.labPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, labPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-xs text-slate-400">PROD proxy URL</div>
+                <input value={vpsModel?.mievento?.prodProxyUrl || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, prodProxyUrl:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+            </div>
+          </details>
+
+          <details className="group p-4 rounded-xl border border-white/10 bg-white/5">
+            <summary className="cursor-pointer select-none flex items-center justify-between">
+              <div>
+                <div className="font-bold">SISPROIND</div>
+                <div className="text-xs text-slate-400">Puertos, DB y data roots</div>
+              </div>
+              <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
+              <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+            </summary>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-slate-400">PROD puerto</div>
+                <input value={vpsModel?.sisproind?.prodPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">PROD DB</div>
+                <input value={vpsModel?.sisproind?.prodDb || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodDb:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-xs text-slate-400">PROD data root</div>
+                <input value={vpsModel?.sisproind?.prodDataRoot || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodDataRoot:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">LAB puerto</div>
+                <input value={vpsModel?.sisproind?.labPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">LAB DB</div>
+                <input value={vpsModel?.sisproind?.labDb || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labDb:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-xs text-slate-400">LAB data root</div>
+                <input value={vpsModel?.sisproind?.labDataRoot || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labDataRoot:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+            </div>
+          </details>
+
+          <details className="group p-4 rounded-xl border border-white/10 bg-white/5">
+            <summary className="cursor-pointer select-none flex items-center justify-between">
+              <div>
+                <div className="font-bold">MAKO (puertos + nota)</div>
+                <div className="text-xs text-slate-400">Backend/front + texto de nota</div>
+              </div>
+              <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
+              <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+            </summary>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-slate-400">Backend LAB puerto</div>
+                <input value={vpsModel?.mako?.backendLabPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, backendLabPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">Backend PROD puerto</div>
+                <input value={vpsModel?.mako?.backendProdPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, backendProdPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">Front LAB puerto</div>
+                <input value={vpsModel?.mako?.frontLabPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, frontLabPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">Front PROD puerto</div>
+                <input value={vpsModel?.mako?.frontProdPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, frontProdPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-xs text-slate-400">Nota</div>
+                <textarea value={vpsModel?.mako?.notes || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, notes:v}})); setVpsDirty(true)}} className="mt-1 w-full min-h-[90px] px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm" />
+              </div>
+            </div>
+          </details>
+
+          <details className="group p-4 rounded-xl border border-white/10 bg-white/5">
+            <summary className="cursor-pointer select-none flex items-center justify-between">
+              <div>
+                <div className="font-bold">Raw Markdown</div>
+                <div className="text-xs text-slate-400">Vista previa del archivo</div>
+              </div>
+              <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
+              <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+            </summary>
+            <div className="mt-3">
+              <Pre text={vpsText || '—'} />
+            </div>
+          </details>
         </div>
       </Section>
 
