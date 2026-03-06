@@ -667,7 +667,8 @@ export default function DashboardPage() {
                     // level-3: 180..359
                     // level-4: 360+ (6h+)  (cap at 12h in meaning, but level stays 4)
                     let level = 0
-                    if (minutes > 0 && minutes < 60) level = 1
+                    if (minutes <= 0) level = 0
+                    else if (minutes < 60) level = 1
                     else if (minutes < 180) level = 2
                     else if (minutes < 360) level = 3
                     else level = 4
