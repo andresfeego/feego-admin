@@ -20,6 +20,16 @@ function isoUtcNow() {
   return new Date().toISOString();
 }
 
+function appendErrorLog(msg) {
+  try {
+    const out = '/root/.openclaw/workspace/.secrets/activity_recompute_errors.log';
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.appendFileSync(out, `[${isoUtcNow()}] ${msg}
+`, 'utf8');
+  } catch {}
+}
+
+
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
@@ -290,5 +300,6 @@ async function main() {
 
 main().catch((e) => {
   console.error(e);
+  try { appendErrorLog(String((e && e.stack) ? e.stack : e)); } catch {}
   process.exit(1);
 });
