@@ -722,18 +722,33 @@ export default function DashboardPage() {
 
               <Card className="p-4">
                 <div className="text-xs feego-muted">Por proyecto (aprox)</div>
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-[140px,1fr] gap-4 items-start">
+                  <div className="flex items-start justify-start">
+                    <DonutRing
+                      data={activityDay.byProject}
+                      total={activityDay.minutes_total}
+                      colors={Object.fromEntries((infraProjects || []).map((p) => [p.slug, p.color_hex || null]).filter(([,c]) => c))}
+                      size={120}
+                      stroke={14}
+                      gapDeg={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
                   {Object.entries(activityDay.byProject || {})
                     .sort((a, b) => (b[1] || 0) - (a[1] || 0))
                     .map(([k, v]) => {
                       const pct = activityDay.minutes_total ? Math.round((v / activityDay.minutes_total) * 100) : 0
                       return (
                         <div key={k} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-white/5 border border-white/10">
-                          <div className="font-mono text-sm">{k}</div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-2.5 h-2.5 rounded-full border border-white/10" style={{ background: (Object.fromEntries((infraProjects || []).map((p) => [p.slug, p.color_hex || null]).filter(([,c]) => c))[k] || makeHashColor(k)) }} />
+                            <div className="font-mono text-sm truncate">{k}</div>
+                          </div>
                           <div className="text-xs text-slate-200">{pct}% · {formatMinutes(v)}</div>
                         </div>
                       )
                     })}
+                  </div>
                 </div>
               </Card>
             </div>
