@@ -1,7 +1,7 @@
 import React from 'react'
 import Calendar from 'react-calendar'
-import 'react-calendar/dist/Calendar.css'
 import Holidays from 'date-holidays'
+import '../styles/calendar-min.css'
 import { api } from '../lib/api'
 import { Card } from '../components/ui.jsx'
 
@@ -602,6 +602,7 @@ export default function DashboardPage() {
 
               <div className="mt-3">
                 <Calendar
+                  className="feego-calendar"
                   value={activityActiveDate}
                   onActiveStartDateChange={({ activeStartDate }) => {
                     if (activeStartDate) setActivityActiveDate(activeStartDate)
@@ -626,30 +627,14 @@ export default function DashboardPage() {
                   }}
                   tileContent={({ date, view }) => {
                     if (view !== 'month') return null
-                    const day = date.toISOString().slice(0, 10)
-                    const rec = (activitySummary.days || []).find((x) => x.day === day)
-                    const minutes = rec ? rec.minutes_total : 0
-
                     const hd = new Holidays('CO')
                     const hols = hd.isHoliday(date)
                     const holidayName = Array.isArray(hols) && hols.length ? hols[0].name : null
-
-                    const colors = Object.fromEntries(
-                      (infraProjects || []).map((p) => [p.slug, p.color_hex || null]).filter(([, c]) => c)
-                    )
-
                     return (
                       <div className="relative w-full h-full">
-                        <div className="absolute top-1 right-2 text-[11px] font-mono text-white/80">{String(date.getDate())}</div>
-
-                        <div className="absolute left-2 bottom-2">
-                          <Pie data={rec ? rec.byProject : {}} total={minutes} colors={colors} />
-                        </div>
-
-                        <div className="absolute left-2 top-1 text-[11px] text-slate-300">{formatMinutes(minutes)}</div>
-
+                        <div className="feego-cal-daynum">{String(date.getDate())}</div>
                         {holidayName ? (
-                          <div className="absolute right-2 bottom-2 text-[10px] text-amber-200 max-w-[130px] text-right leading-3" title={holidayName}>
+                          <div className="feego-cal-holiday" title={holidayName}>
                             {holidayName}
                           </div>
                         ) : null}
