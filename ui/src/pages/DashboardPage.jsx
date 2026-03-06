@@ -221,6 +221,63 @@ function ProjectCard({ p, onClick }) {
   )
 }
 
+
+function formatMinutes(mins) {
+  const m = Number(mins || 0)
+  const h = Math.floor(m / 60)
+  const r = m % 60
+  if (h <= 0) return `${r} min`
+  if (r === 0) return `${h} h`
+  return `${h} h ${r} min`
+}
+
+function makeHashColor(key) {
+  const s = String(key || '')
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  const r = 80 + (h & 0x7f)
+  const g = 80 + ((h >>> 7) & 0x7f)
+  const b = 80 + ((h >>> 14) & 0x7f)
+  return `rgb(${r}, ${g}, ${b})`
+}
+
+function Pie({ data, total, colors }) {
+  const entries = Object.entries(data || {}).filter(([,v]) => Number(v) > 0)
+  const sum = total || entries.reduce((a,[,v])=>a+Number(v||0),0)
+  const cx = 64, cy = 64, r = 56
+  let a0 = -Math.PI / 2
+
+  function arcPath(aStart, aEnd) {
+    const x1 = cx + r * Math.cos(aStart)
+    const y1 = cy + r * Math.sin(aStart)
+    const x2 = cx + r * Math.cos(aEnd)
+    const y2 = cy + r * Math.sin(aEnd)
+    const large = (aEnd - aStart) > Math.PI ? 1 : 0
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`
+  }
+
+  return (
+    <svg width={128} height={128} viewBox="0 0 128 128" className="rounded-xl bg-black/20 border border-white/10">
+      {entries.length === 0 ? (
+        <circle cx={cx} cy={cy} r={r} fill="rgba(255,255,255,0.06)" />
+      ) : (
+        entries.map(([k, v]) => {
+          const frac = sum ? Number(v) / sum : 0
+          const a1 = a0 + frac * Math.PI * 2
+          const fill = (colors && colors[k]) || makeHashColor(k)
+          const d = arcPath(a0, a1)
+          a0 = a1
+          return <path key={k} d={d} fill={fill} />
+        })
+      )}
+      <circle cx={cx} cy={cy} r={28} fill="rgba(0,0,0,0.55)" />
+      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill="rgba(255,255,255,0.9)" fontSize="11" fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace">
+        {formatMinutes(sum)}
+      </text>
+    </svg>
+  )
+}
+
 export default function DashboardPage() {
   const [st, setSt] = React.useState(null)
   const [ov, setOv] = React.useState(null)
@@ -531,8 +588,8 @@ export default function DashboardPage() {
           ) : null}
 
           {!activityLoading && activitySummary && (activitySummary.days || []).length ? (
-            <div className="grid grid-cols-[repeat(14,minmax(0,1fr))] gap-1">
-              {(activitySummary.days || []).slice(-98).map((d) => {
+            <div className="grid grid-cols-7 gap-2">
+              {(activitySummary.days || []).slice(-35).map((d) => {
                 const m = d.minutes_total || 0
                 const level =
                   m === 0
@@ -548,9 +605,7 @@ export default function DashboardPage() {
                   <button
                     key={d.day}
                     className={
-                      'h-5 rounded ' +
-                      level +
-                      ' border border-white/10 hover:border-white/30'
+                      'h-12 rounded-lg ' + level + ' border border-white/10 hover:border-white/30 flex items-start justify-start px-2 py-1 text-[11px] font-mono text-white/80'
                     }
                     title={d.day + ' · ' + m + ' min · ' + d.source}
                     onClick={async () => {
@@ -562,7 +617,9 @@ export default function DashboardPage() {
                         }
                       } catch {}
                     }}
-                  />
+                  >
+                    {d.day.split('-')[2]}
+                  </button>
                 )
               })}
             </div>
@@ -575,7 +632,7 @@ export default function DashboardPage() {
               <Card className="p-4">
                 <div className="text-xs feego-muted">Resumen</div>
                 <div className="mt-2 text-sm text-slate-200">
-                  {activityDay.minutes_total} minutos · fuente: <span className="font-mono">{activityDay.source}</span>
+                  {formatMinutes(activityDay.minutes_total)} · fuente: <span className="font-mono">{activityDay.source}</span>
                 </div>
               </Card>
 
