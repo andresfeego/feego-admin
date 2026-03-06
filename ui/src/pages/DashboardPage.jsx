@@ -247,7 +247,7 @@ export default function DashboardPage() {
   const [vpsText, setVpsText] = React.useState('')
   const [vpsModel, setVpsModel] = React.useState(parseVpsMd(''))
 
-  async function refresh() {
+  async function refreshStats() {
     setErr(null)
     const r1 = await api('/api/status')
     if (r1.ok) setSt(r1.data)
@@ -255,30 +255,35 @@ export default function DashboardPage() {
     const r2 = await api('/api/system/overview')
     if (r2.ok) setOv(r2.data)
     else setErr(r2.error || 'No se pudo cargar overview')
+  }
 
-    setProjectsLoading(true)
-    const r3 = await api('/api/infra/projects')
-    if (r3.ok) {
-      const base = r3.data.projects || []
-      // Enrich each card from its .md (fresh) so pending_count updates immediately after edits
-      const enriched = await Promise.all(base.map(async (proj) => {
-        try {
-          const rmd = await api('/api/infra/projects/' + encodeURIComponent(proj.slug) + '/md')
-          if (rmd.ok) {
-            const pendientes = (rmd.data && rmd.data.pendientes) ? rmd.data.pendientes : []
-            return { ...proj, pending_count: pendientes.length }
-          }
-        } catch {}
-        return proj
-      }))
-      setInfraProjects(enriched)
+  async function refreshProjects({ showOverlay } = {}) {
+    try {
+      if (showOverlay) setProjectsLoading(true)
+      const r3 = await api('/api/infra/projects')
+      if (r3.ok) {
+        const base = r3.data.projects || []
+        const enriched = await Promise.all(base.map(async (proj) => {
+          try {
+            const rmd = await api('/api/infra/projects/' + encodeURIComponent(proj.slug) + '/md')
+            if (rmd.ok) {
+              const pendientes = (rmd.data && rmd.data.pendientes) ? rmd.data.pendientes : []
+              return { ...proj, pending_count: pendientes.length }
+            }
+          } catch {}
+          return proj
+        }))
+        setInfraProjects(enriched)
+      }
+    } finally {
+      if (showOverlay) setProjectsLoading(false)
     }
-    setProjectsLoading(false)
   }
 
   React.useEffect(() => {
-    refresh()
-    const t = setInterval(refresh, 10_000)
+    refreshStats()
+    refreshProjects({ showOverlay: false })
+    const t = setInterval(refreshStats, 10_000)
     return () => clearInterval(t)
   }, [])
 
@@ -305,7 +310,7 @@ export default function DashboardPage() {
           <div className="text-[32px] leading-[40px] font-bold">Dashboard</div>
           <div className="text-sm leading-5 text-slate-400">Estado del VPS (solo lectura)</div>
         </div>
-        <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={refresh}>
+        <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={async () => { await refreshStats(); await refreshProjects({ showOverlay: true }) }}>
           Refrescar
         </button>
       </div>
@@ -324,6 +329,107 @@ export default function DashboardPage() {
         <Tile title="IP pública" value={ov ? (ov.publicIp || '—') : '…'} />
       </div>
 
+
+      
+
+      <Section title="Proyectos">
+        <div className="relative">
+                {!projectsLoading && (infraProjects || []).length === 0 ? <div className="text-sm text-slate-400">No hay proyectos registrados.</div> : null}
+
+          {projectsLoading ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl">
+              <div className="text-sm text-slate-200">Cargando proyectos…</div>
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {(infraProjects || []).map((p) => (
+            <ProjectCard key={p.slug} p={p} onClick={async () => {
+              setActiveProject(p)
+              setActiveProjectMd(null)
+              try {
+                setActiveProjectMdLoading(true)
+                const r = await api('/api/infra/projects/' + encodeURIComponent(p.slug) + '/md')
+                if (r.ok) setActiveProjectMd(r.data)
+              } finally {
+                setActiveProjectMdLoading(false)
+              }
+            }} />
+          ))}
+          </div>
+        </div>
+      </Section>
+
+<Modal open={!!activeProject}onClose={() => { setActiveProject(null); setActiveProjectMd(null) }} title={activeProject ? activeProject.name : ''}>
+        {!activeProject ? null : (
+          <div className="space-y-4">
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Fuente</div>
+              <div className="mt-2 text-sm text-slate-300">.md del proyecto (si existe) + metadata DB para cards.</div>
+              {activeProjectMd && activeProjectMd.path ? <div className="mt-2 text-xs text-slate-400 font-mono">{activeProjectMd.path}</div> : null}
+              {activeProjectMdLoading ? <div className="mt-2 text-xs text-slate-400">Cargando .md…</div> : null}
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Pendientes</div>
+              {activeProjectMd && (activeProjectMd.pendientes || []).length ? (
+                <div className="mt-2 space-y-2">
+                  {(activeProjectMd.pendientes || []).map((it, i) => (
+                    <div key={i} className="text-sm">
+                      <span className="font-mono text-xs text-slate-400">[{it.tag}]</span>{' '}
+                      <span className="text-slate-200">{it.text}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-slate-400">—</div>
+              )}
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Detalle (por secciones)</div>
+              {activeProjectMd && activeProjectMd.content ? (
+                <div className="mt-3 space-y-2">
+                  {parseMdSections(activeProjectMd.content).map((s, i) => (
+                    <details key={i} className="group rounded-xl border border-white/10 bg-white/5">
+                      <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="font-bold">{s.title}</div>
+                        <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
+                        <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+                      </summary>
+                      <div className="px-4 pb-4">
+                        <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-slate-400">—</div>
+              )}
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">Dominios (DB)</div>
+              <div className="mt-2 space-y-1">
+                {(activeProject.domains || []).map((d) => (
+                  <div key={d} className="font-mono text-sm">{d}</div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs feego-muted">GitHub (DB)</div>
+              <div className="mt-2 text-sm">
+                {activeProject.repo_url ? (
+                  <a className="underline" href={activeProject.repo_url} target="_blank" rel="noreferrer">{activeProject.repo_url}</a>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
+      </Modal>
 
       <Section title="Contexto (VPS / Proyectos)">
         <div className="text-sm text-slate-300">
@@ -449,97 +555,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </Section>
-
-      <Section title="Proyectos">
-        {projectsLoading ? <div className="text-sm text-slate-400">Cargando proyectos…</div> : null}
-        {!projectsLoading && (infraProjects || []).length === 0 ? <div className="text-sm text-slate-400">No hay proyectos registrados.</div> : null}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {(infraProjects || []).map((p) => (
-            <ProjectCard key={p.slug} p={p} onClick={async () => {
-              setActiveProject(p)
-              setActiveProjectMd(null)
-              try {
-                setActiveProjectMdLoading(true)
-                const r = await api('/api/infra/projects/' + encodeURIComponent(p.slug) + '/md')
-                if (r.ok) setActiveProjectMd(r.data)
-              } finally {
-                setActiveProjectMdLoading(false)
-              }
-            }} />
-          ))}
-        </div>
-      </Section>
-
-            <Modal open={!!activeProject} onClose={() => { setActiveProject(null); setActiveProjectMd(null) }} title={activeProject ? activeProject.name : ''}>
-        {!activeProject ? null : (
-          <div className="space-y-4">
-            <Card className="p-4">
-              <div className="text-xs feego-muted">Fuente</div>
-              <div className="mt-2 text-sm text-slate-300">.md del proyecto (si existe) + metadata DB para cards.</div>
-              {activeProjectMd && activeProjectMd.path ? <div className="mt-2 text-xs text-slate-400 font-mono">{activeProjectMd.path}</div> : null}
-              {activeProjectMdLoading ? <div className="mt-2 text-xs text-slate-400">Cargando .md…</div> : null}
-            </Card>
-
-            <Card className="p-4">
-              <div className="text-xs feego-muted">Pendientes</div>
-              {activeProjectMd && (activeProjectMd.pendientes || []).length ? (
-                <div className="mt-2 space-y-2">
-                  {(activeProjectMd.pendientes || []).map((it, i) => (
-                    <div key={i} className="text-sm">
-                      <span className="font-mono text-xs text-slate-400">[{it.tag}]</span>{' '}
-                      <span className="text-slate-200">{it.text}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-2 text-sm text-slate-400">—</div>
-              )}
-            </Card>
-
-            <Card className="p-4">
-              <div className="text-xs feego-muted">Detalle (por secciones)</div>
-              {activeProjectMd && activeProjectMd.content ? (
-                <div className="mt-3 space-y-2">
-                  {parseMdSections(activeProjectMd.content).map((s, i) => (
-                    <details key={i} className="group rounded-xl border border-white/10 bg-white/5">
-                      <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
-                        <div className="font-bold">{s.title}</div>
-                        <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
-                        <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
-                      </summary>
-                      <div className="px-4 pb-4">
-                        <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-2 text-sm text-slate-400">—</div>
-              )}
-            </Card>
-
-            <Card className="p-4">
-              <div className="text-xs feego-muted">Dominios (DB)</div>
-              <div className="mt-2 space-y-1">
-                {(activeProject.domains || []).map((d) => (
-                  <div key={d} className="font-mono text-sm">{d}</div>
-                ))}
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="text-xs feego-muted">GitHub (DB)</div>
-              <div className="mt-2 text-sm">
-                {activeProject.repo_url ? (
-                  <a className="underline" href={activeProject.repo_url} target="_blank" rel="noreferrer">{activeProject.repo_url}</a>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </div>
-            </Card>
-          </div>
-        )}
-      </Modal>
 
       <Section title="Servicios">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
