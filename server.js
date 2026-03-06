@@ -1492,6 +1492,25 @@ app.get('/api/status', requireAuth, (req, res) => {
   res.json({ hostname: os.hostname(), uptime: Math.round(os.uptime() / 60) + 'm', mem: memStr, load });
 });
 
+// Deploy verification (public, no auth)
+app.get('/api/__version', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  let sha = process.env.APP_SHA || null;
+  try {
+    if (!sha) {
+      const { execSync } = require('child_process');
+      sha = execSync('git -C /opt/feego-admin rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    }
+  } catch (e) {}
+
+  res.json({
+    app: process.env.APP_NAME || 'feegoadmin',
+    env: process.env.APP_ENV || 'prod',
+    sha,
+    builtAt: process.env.BUILT_AT || null,
+  });
+});
+
 // VPS runbook/context (vps.md)
 app.get('/api/vps-md', requireAuth, async (req, res) => {
   try {
