@@ -34,13 +34,18 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
+const TZ_BOGOTA = 'America/Bogota';
+
 function dayKey(dt) {
-  // dt is Date
-  const y = dt.getUTCFullYear();
-  const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(dt.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  // YYYY-MM-DD in Bogota time (user-facing day buckets)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ_BOGOTA,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(dt);
 }
+
 
 function parseJsonLines(p) {
   if (!fs.existsSync(p)) return [];
@@ -140,8 +145,7 @@ function parseWhatsappMessages(text) {
     if (ap === 'p' && hh !== 12) hh += 12;
     if (ap === 'a' && hh === 12) hh = 0;
     const [dd, mm, yyyy] = datePart.split('/').map((x) => Number(x));
-    // WhatsApp export is local-time; we keep it as naive and treat as local. We'll store by DATE only.
-    // We'll interpret as UTC for consistent day buckets; this is approximate.
+    // WhatsApp export is local-time (Bogota). We parse it into a Date; dayKey() buckets it in America/Bogota.
     return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, ss));
   }
 
@@ -280,7 +284,32 @@ async function main() {
     connectionLimit: 3,
   });
 
-  try {
+  
+    // Merge manual events (so recompute does NOT wipe WhatsApp/manual entries)
+    let conn;
+    try {
+      conn = await pool.getConnection();
+      const manualRows = await conn.query(
+        "SELECT DATE_FORMAT(day,'%Y-%m-%d') AS day, project_slug, SUM(minutes) AS minutes FROM infra_activity_manual_events GROUP BY day, project_slug"
+      );
+      for (const r of manualRows) {
+        const dk = r.day;
+        const proj = String(r.project_slug || 'unknown');
+        const mins = Number(r.minutes || 0) || 0;
+        if (!mins) continue;
+
+        if (!merged.has(dk)) merged.set(dk, { minutes_total: 0, minutes_by_project: {}, events_count: 0, source: 'manual' });
+        const rec = merged.get(dk);
+        rec.minutes_total = (Number(rec.minutes_total) || 0) + mins;
+        rec.minutes_by_project = rec.minutes_by_project || {};
+        rec.minutes_by_project[proj] = (Number(rec.minutes_by_project[proj]) || 0) + mins;
+        rec.source = rec.source && rec.source !== 'manual' ? 'mixed' : 'manual';
+      }
+    } finally {
+      if (conn) conn.release();
+    }
+
+try {
     // write per-source rows
     const rowsExec = new Map();
     const rowsChat = new Map();
