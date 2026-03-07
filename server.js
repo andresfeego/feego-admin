@@ -1818,54 +1818,123 @@ app.get('/api/infra/activity/day', requireAuth, async (req, res) => {
 });
 
 
+
 app.post('/api/infra/activity/manual', requireAuth, async (req, res) => {
   let conn;
   try {
-    const day = String((req.body && req.body.day) || '').trim();
+    const day = String((req.body && req.body.day) || '').trim(); // YYYY-MM-DD (Bogota)
     const project_slug = String((req.body && (req.body.project_slug || req.body.project)) || 'unknown').trim() || 'unknown';
-    const minutes = Math.max(0, Math.min(24 * 60, Number((req.body && req.body.minutes) ?? 0) || 0));
     const title = String((req.body && req.body.title) || 'Registro manual').trim() || 'Registro manual';
     const notes = String((req.body && req.body.notes) || '').trim();
 
+    // Range in minutes-from-midnight (Bogota local)
+    const startMin = Number((req.body && req.body.start_min) ?? NaN);
+    const endMin = Number((req.body && req.body.end_min) ?? NaN);
+
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
-    if (!minutes) return res.status(400).json({ ok: false, error: 'bad_minutes' });
+    if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return res.status(400).json({ ok: false, error: 'missing_range' });
+
+    const a = Math.max(0, Math.min(24 * 60, Math.floor(startMin)));
+    const b = Math.max(0, Math.min(24 * 60, Math.floor(endMin)));
+    if (b <= a) return res.status(400).json({ ok: false, error: 'bad_range' });
 
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    // persist manual event (audit trail)
-    await conn.query(
-      'INSERT INTO infra_activity_manual_events (day, project_slug, minutes, title, notes, source, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [day, project_slug, minutes, title, notes, 'manual', String(req.session && req.session.user && req.session.user.username || 'admin')],
+    // Load existing non-manual segments for that day/project (Bogota day bucket)
+    const existing = await conn.query(
+      "SELECT start_at, end_at FROM infra_activity_segments WHERE day=? AND project_slug=? AND source IN ('exec','chat') ORDER BY start_at ASC",
+      [day, project_slug],
     );
 
-    // upsert daily aggregate
-    const rows = await conn.query('SELECT minutes_total, minutes_by_project_json, source, events_count FROM infra_activity_daily WHERE day=? LIMIT 1', [day]);
-    let minutes_total = minutes;
-    let byProject = { [project_slug]: minutes };
-    let source = 'manual';
-    let events_count = 1;
+    // Convert minutes-from-midnight to pseudo timeline (minutes) and subtract overlaps.
+    // We store manual segments only as minutes; no need for real UTC timestamps for now.
+    // We'll set start_at/end_at as UTC by anchoring to day date at 00:00Z and adding minutes.
+    // (Display is day-based today; this is for future use.)
 
-    if (rows.length) {
-      const r = rows[0];
-      minutes_total = (Number(r.minutes_total) || 0) + minutes;
-      events_count = (Number(r.events_count) || 0) + 1;
-      source = (r.source && r.source !== 'unknown' && r.source !== 'manual') ? 'mixed' : 'manual';
-      try { byProject = r.minutes_by_project_json ? JSON.parse(r.minutes_by_project_json) : {}; } catch (e) { byProject = {}; }
-      byProject[project_slug] = (Number(byProject[project_slug]) || 0) + minutes;
+    function toMinUtc(d) {
+      const s = String(d || '');
+      const dt = new Date(s);
+      if (Number.isNaN(dt.getTime())) return null;
+      return dt.getTime() / 60000;
+    }
+
+    // Anchor: day at 00:00Z
+    const anchorUtc = Date.parse(day + 'T00:00:00Z') / 60000;
+
+    // Build occupied intervals in [a,b) space using existing segments mapped onto same anchor day.
+    const occ = [];
+    for (const r of existing) {
+      const s = toMinUtc(r.start_at);
+      const e = toMinUtc(r.end_at);
+      if (s === null || e === null) continue;
+      // Map to offset minutes in that anchor day
+      const os = Math.max(0, Math.min(24*60, Math.round(s - anchorUtc)));
+      const oe = Math.max(0, Math.min(24*60, Math.round(e - anchorUtc)));
+      if (oe > os) occ.push([os, oe]);
+    }
+    occ.sort((x,y)=>x[0]-y[0]);
+
+    // Merge occupied
+    const merged = [];
+    for (const it of occ) {
+      if (!merged.length || it[0] > merged[merged.length-1][1]) merged.push(it);
+      else merged[merged.length-1][1] = Math.max(merged[merged.length-1][1], it[1]);
+    }
+
+    // Subtract merged occupied from [a,b)
+    const free = [];
+    let cur = a;
+    for (const [s,e] of merged) {
+      if (e <= cur) continue;
+      if (s >= b) break;
+      if (s > cur) free.push([cur, Math.min(s,b)]);
+      cur = Math.max(cur, e);
+      if (cur >= b) break;
+    }
+    if (cur < b) free.push([cur,b]);
+
+    // Insert manual segments for free intervals
+    let insertedMinutes = 0;
+    let inserted = 0;
+    for (const [s,e] of free) {
+      const minutes = e - s;
+      if (minutes <= 0) continue;
+      insertedMinutes += minutes;
+      inserted += 1;
+      const start_at = new Date((anchorUtc + s) * 60000);
+      const end_at = new Date((anchorUtc + e) * 60000);
       await conn.query(
-        'UPDATE infra_activity_daily SET minutes_total=?, minutes_by_project_json=?, source=?, events_count=?, updated_at=NOW() WHERE day=?',
-        [minutes_total, JSON.stringify(byProject), source, events_count, day],
-      );
-    } else {
-      await conn.query(
-        'INSERT INTO infra_activity_daily (day, minutes_total, minutes_by_project_json, source, events_count, updated_at) VALUES (?, ?, ?, ?, ?, NOW())',
-        [day, minutes_total, JSON.stringify(byProject), source, events_count],
+        'INSERT INTO infra_activity_segments (day, project_slug, source, start_at, end_at, minutes, notes, created_at) VALUES (?,?,?,?,?,?,?,NOW())',
+        [day, project_slug, 'manual', start_at, end_at, minutes, `${title}${notes ? ' — ' + notes : ''}`],
       );
     }
 
+    // Recompute daily aggregate for that day from segments
+    const rows = await conn.query(
+      "SELECT project_slug, SUM(minutes) AS minutes FROM infra_activity_segments WHERE day=? GROUP BY project_slug",
+      [day],
+    );
+    const byProject = {};
+    let total = 0;
+    for (const r of rows) {
+      const m = Number(r.minutes || 0) || 0;
+      if (m > 0) byProject[String(r.project_slug)] = m;
+      total += m;
+    }
+    const c = await conn.query("SELECT COUNT(*) AS c FROM infra_activity_segments WHERE day=?", [day]);
+    const events_count = c && c[0] ? Number(c[0].c || 0) : 0;
+
+    await conn.query(
+      `INSERT INTO infra_activity_daily (day, minutes_total, minutes_by_project_json, source, events_count, updated_at)
+       VALUES (?,?,?,?,?,NOW())
+       ON DUPLICATE KEY UPDATE minutes_total=VALUES(minutes_total), minutes_by_project_json=VALUES(minutes_by_project_json), source=VALUES(source), events_count=VALUES(events_count), updated_at=VALUES(updated_at)`,
+      [day, total, JSON.stringify(byProject), 'segments', events_count],
+    );
+
     await conn.commit();
-    res.json({ ok: true, day, minutes_total, byProject, source });
+
+    res.json({ ok: true, day, project_slug, requested: { start_min: a, end_min: b }, inserted_minutes: insertedMinutes, inserted_segments: inserted });
   } catch (e) {
     try { if (conn) await conn.rollback(); } catch (e2) {}
     res.status(500).json({ ok: false, error: 'manual_insert_failed' });
