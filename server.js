@@ -1734,6 +1734,37 @@ app.get('/api/infra/projects/:slug', requireAuth, async (req, res) => {
   }
 });
 
+app.patch('/api/infra/projects/:slug', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const slug = String(req.params.slug || '').trim();
+    if (!slug) return res.status(400).json({ ok: false, error: 'bad_slug' });
+
+    const raw = (req.body && Object.prototype.hasOwnProperty.call(req.body, 'color_hex'))
+      ? String(req.body.color_hex || '').trim()
+      : null;
+
+    // Allow clearing
+    let color_hex = null;
+    if (raw !== null && raw !== '') {
+      const s = raw.startsWith('#') ? raw : ('#' + raw);
+      if (!/^#[0-9a-fA-F]{6}$/.test(s)) return res.status(400).json({ ok: false, error: 'bad_color_hex' });
+      color_hex = s.toLowerCase();
+    }
+
+    conn = await pool.getConnection();
+    const r = await conn.query('UPDATE infra_projects SET color_hex=? WHERE slug=?', [color_hex, slug]);
+    if (!r || r.affectedRows === 0) return res.status(404).json({ ok: false, error: 'not_found' });
+    res.json({ ok: true, slug, color_hex });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'update_failed' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+
+
 
 // Infra activity (calendar)
 app.get('/api/infra/activity/summary', requireAuth, async (req, res) => {

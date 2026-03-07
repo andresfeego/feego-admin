@@ -58,6 +58,10 @@ export default function SettingsPage() {
   const [msg, setMsg] = React.useState('')
   const [saving, setSaving] = React.useState(false)
 
+  const [projects, setProjects] = React.useState([])
+  const [projectsLoading, setProjectsLoading] = React.useState(false)
+  const [savingColors, setSavingColors] = React.useState(false)
+
   async function j(url, opts) {
     const r = await fetch(url, { credentials: 'include', ...opts })
     const t = await r.text()
@@ -78,8 +82,45 @@ export default function SettingsPage() {
     }
   }
 
+
+  async function loadProjects() {
+    setProjectsLoading(true)
+    try {
+      const r = await j('/api/infra/projects')
+      const list = (r.projects || []).map((p) => ({
+        slug: p.slug,
+        name: p.name,
+        color_hex: p.color_hex || '',
+      }))
+      setProjects(list)
+    } catch {
+      // ignore; not critical
+    } finally {
+      setProjectsLoading(false)
+    }
+  }
+
+  async function saveProjectColor(slug, color_hex) {
+    setSavingColors(true)
+    setMsg('')
+    try {
+      await j('/api/infra/projects/' + encodeURIComponent(slug), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color_hex: color_hex || null }),
+      })
+      setMsg('Colores actualizados')
+      await loadProjects()
+    } catch {
+      setMsg('Error guardando color')
+    } finally {
+      setSavingColors(false)
+    }
+  }
+
   React.useEffect(() => {
     loadBranding()
+    loadProjects()
   }, [])
 
   async function saveBranding() {
@@ -159,6 +200,53 @@ export default function SettingsPage() {
               <input value={branding.signerRole} onChange={(e) => setBranding({ ...branding, signerRole: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-white/10 bg-black/20" placeholder="Cargo de quien firma" />
             </div>
           </Card>
+
+          <Card title="Proyectos (colores)" desc="Color por proyecto para actividad/analíticas.">
+            {projectsLoading ? <div className="text-sm opacity-70">Cargando proyectos…</div> : null}
+            {!projectsLoading && !projects.length ? <div className="text-sm opacity-70">—</div> : null}
+
+            <div className="space-y-3">
+              {(projects || []).map((p) => (
+                <div key={p.slug} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-black/20">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-sm truncate">{p.name}</div>
+                    <div className="text-xs opacity-70 font-mono">{p.slug}</div>
+                  </div>
+
+                  <input
+                    type="color"
+                    value={(p.color_hex || '#000000').startsWith('#') ? (p.color_hex || '#000000') : ('#' + (p.color_hex || '000000'))}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setProjects((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, color_hex: v } : x)))
+                    }}
+                    className="h-10 w-10 rounded-lg border border-white/10 bg-transparent"
+                    aria-label={"Color " + p.slug}
+                  />
+
+                  <input
+                    value={p.color_hex || ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setProjects((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, color_hex: v } : x)))
+                    }}
+                    className="w-[120px] px-3 py-2 rounded-xl border border-white/10 bg-black/20 font-mono text-xs"
+                    placeholder="#RRGGBB"
+                  />
+
+                  <button
+                    onClick={() => saveProjectColor(p.slug, p.color_hex)}
+                    disabled={savingColors}
+                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm"
+                    title="Guardar"
+                  >
+                    {savingColors ? '…' : 'Guardar'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Card>
+
 
           <Card title="Logo" desc="Se guarda en data/branding/logo.png y se usa en cotizaciones.">
             <div className="space-y-3">
