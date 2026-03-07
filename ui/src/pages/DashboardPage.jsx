@@ -21,6 +21,23 @@ function monthLabelBogota(date) {
   return new Intl.DateTimeFormat('es-CO', { timeZone: TZ_BOGOTA, month: 'long', year: 'numeric' }).format(date)
 }
 
+function fmtBogota(isoOrDate) {
+  if (!isoOrDate) return '—'
+  const d = isoOrDate instanceof Date ? isoOrDate : new Date(String(isoOrDate))
+  if (Number.isNaN(d.getTime())) return String(isoOrDate)
+  return new Intl.DateTimeFormat('es-CO', {
+    timeZone: TZ_BOGOTA,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).format(d)
+}
+
+
 function Tile({ title, value, sub }) {
   return (
     <Card className="p-4">
@@ -607,7 +624,7 @@ export default function DashboardPage() {
           <div className="text-sm text-slate-300">
             Bitácora (chat histórico + comandos OpenClaw). Última actualización:{' '}
             <span className="font-mono text-xs text-slate-200">
-              {activitySummary && activitySummary.last_computed_at ? activitySummary.last_computed_at : '—'}
+              {activitySummary && activitySummary.last_computed_at ? fmtBogota(activitySummary.last_computed_at) : '—'}
             </span>
           </div>
           <div className="flex items-center gap-2">
