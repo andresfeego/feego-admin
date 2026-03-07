@@ -143,11 +143,11 @@ html[data-theme="light"] .feego-calendar .react-calendar__tile:enabled:hover {
 .feego-cal.level-3 { background: color-mix(in srgb, #22c55e, transparent 60%); }
 .feego-cal.level-4 { background: color-mix(in srgb, #22c55e, transparent 45%); }
 
-html[data-theme="dark"] .feego-cal.level-0 { background: #ffffff; }
-html[data-theme="dark"] .feego-cal.level-1 { background: color-mix(in srgb, #22c55e, transparent 92%); }
-html[data-theme="dark"] .feego-cal.level-2 { background: color-mix(in srgb, #22c55e, transparent 82%); }
-html[data-theme="dark"] .feego-cal.level-3 { background: color-mix(in srgb, #22c55e, transparent 70%); }
-html[data-theme="dark"] .feego-cal.level-4 { background: color-mix(in srgb, #22c55e, transparent 55%); }
+html[data-theme="dark"] .feego-cal.level-0 { background: rgba(255,255,255,0.03); }
+html[data-theme="dark"] .feego-cal.level-1 { background: color-mix(in srgb, #22c55e, rgba(255,255,255,0.02) 92%); }
+html[data-theme="dark"] .feego-cal.level-2 { background: color-mix(in srgb, #22c55e, rgba(255,255,255,0.02) 84%); }
+html[data-theme="dark"] .feego-cal.level-3 { background: color-mix(in srgb, #22c55e, rgba(255,255,255,0.02) 74%); }
+html[data-theme="dark"] .feego-cal.level-4 { background: color-mix(in srgb, #22c55e, rgba(255,255,255,0.02) 60%); }
 
 /* Ensure uniform cell sizing (override react-calendar defaults) */
 .feego-calendar * { box-sizing: border-box; }
@@ -155,4 +155,30 @@ html[data-theme="dark"] .feego-cal.level-4 { background: color-mix(in srgb, #22c
   width: 100% !important;
   max-width: 100% !important;
   flex: none !important;
+}
+
+/* Dark mode polish */
+html[data-theme="dark"] .feego-calendar {
+  background: rgba(2, 6, 23, 0.35);
+}
+html[data-theme="dark"] .feego-calendar .react-calendar__month-view__weekdays {
+  background: rgba(255,255,255,0.04);
+}
+html[data-theme="dark"] .feego-calendar .react-calendar__tile {
+  color: rgba(226, 232, 240, 0.92);
+}
+html[data-theme="dark"] .feego-calendar .react-calendar__month-view__days__day--neighboringMonth {
+  color: rgba(226, 232, 240, 0.38);
+}
+html[data-theme="dark"] .feego-calendar .react-calendar__tile abbr {
+  color: rgba(226, 232, 240, 0.78);
+}
+html[data-theme="dark"] .feego-calendar .react-calendar__tile:enabled:hover {
+  background: rgba(255,255,255,0.07);
+}
+html[data-theme="dark"] .feego-calendar .react-calendar__tile--active {
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.85);
+}
+html[data-theme="dark"] .feego-cal-holiday {
+  color: rgba(251, 191, 36, 0.92);
 }
