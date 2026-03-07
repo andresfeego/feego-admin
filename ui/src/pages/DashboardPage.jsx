@@ -5,6 +5,22 @@ import '../styles/calendar-min.css'
 import { api } from '../lib/api'
 import { Card } from '../components/ui.jsx'
 
+const TZ_BOGOTA = 'America/Bogota'
+
+function dayKeyBogota(date) {
+  // YYYY-MM-DD in Bogota time (fixes UTC day shifts when using toISOString)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ_BOGOTA,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
+function monthLabelBogota(date) {
+  return new Intl.DateTimeFormat('es-CO', { timeZone: TZ_BOGOTA, month: 'long', year: 'numeric' }).format(date)
+}
+
 function Tile({ title, value, sub }) {
   return (
     <Card className="p-4">
@@ -641,7 +657,7 @@ export default function DashboardPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-slate-200 font-bold">
-                  {activityActiveDate.toLocaleString('es-CO', { month: 'long', year: 'numeric' })}
+                  {monthLabelBogota(activityActiveDate)}
                 </div>
                 <div className="text-xs text-slate-400">Semana inicia: lunes</div>
               </div>
@@ -657,7 +673,7 @@ export default function DashboardPage() {
                   showNeighboringMonth={true}
                   tileClassName={({ date, view }) => {
                     if (view !== 'month') return null
-                    const day = date.toISOString().slice(0, 10)
+                    const day = dayKeyBogota(date)
                     const rec = (activitySummary.days || []).find((x) => x.day === day)
                     const minutes = rec ? rec.minutes_total : 0
                     // GitHub-like discrete intensity (minutes)
@@ -675,7 +691,7 @@ export default function DashboardPage() {
                     return 'feego-cal level-' + level
                   }}
                   onClickDay={async (date) => {
-                    const day = date.toISOString().slice(0, 10)
+                    const day = dayKeyBogota(date)
                     try {
                       const rd = await api('/api/infra/activity/day?day=' + encodeURIComponent(day))
                       if (rd.ok) {

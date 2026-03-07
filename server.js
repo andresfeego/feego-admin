@@ -1741,14 +1741,14 @@ app.get('/api/infra/activity/summary', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     const meta = await conn.query("SELECT value FROM infra_activity_meta WHERE `key`='last_computed_at' LIMIT 1");
-    const rows = await conn.query('SELECT day, minutes_total, minutes_by_project_json, source FROM infra_activity_daily ORDER BY day ASC');
+    const rows = await conn.query("SELECT DATE_FORMAT(day,'%Y-%m-%d') AS day, minutes_total, minutes_by_project_json, source FROM infra_activity_daily ORDER BY day ASC");
     const days = rows.map((r) => {
       let byProject = {};
       try {
         byProject = r.minutes_by_project_json ? JSON.parse(r.minutes_by_project_json) : {};
       } catch (e) {}
       return {
-        day: new Date(r.day).toISOString().slice(0, 10),
+        day: r.day,
         minutes_total: r.minutes_total,
         byProject,
         source: r.source,
@@ -1781,6 +1781,63 @@ app.get('/api/infra/activity/day', requireAuth, async (req, res) => {
     res.json({ ok: true, day, minutes_total: r.minutes_total, byProject, source: r.source, events_count: r.events_count, updated_at: r.updated_at });
   } catch (e) {
     res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+
+app.post('/api/infra/activity/manual', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const day = String((req.body && req.body.day) || '').trim();
+    const project_slug = String((req.body && (req.body.project_slug || req.body.project)) || 'unknown').trim() || 'unknown';
+    const minutes = Math.max(0, Math.min(24 * 60, Number((req.body && req.body.minutes) ?? 0) || 0));
+    const title = String((req.body && req.body.title) || 'Registro manual').trim() || 'Registro manual';
+    const notes = String((req.body && req.body.notes) || '').trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+    if (!minutes) return res.status(400).json({ ok: false, error: 'bad_minutes' });
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // persist manual event (audit trail)
+    await conn.query(
+      'INSERT INTO infra_activity_manual_events (day, project_slug, minutes, title, notes, source, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [day, project_slug, minutes, title, notes, 'manual', String(req.session && req.session.user && req.session.user.username || 'admin')],
+    );
+
+    // upsert daily aggregate
+    const rows = await conn.query('SELECT minutes_total, minutes_by_project_json, source, events_count FROM infra_activity_daily WHERE day=? LIMIT 1', [day]);
+    let minutes_total = minutes;
+    let byProject = { [project_slug]: minutes };
+    let source = 'manual';
+    let events_count = 1;
+
+    if (rows.length) {
+      const r = rows[0];
+      minutes_total = (Number(r.minutes_total) || 0) + minutes;
+      events_count = (Number(r.events_count) || 0) + 1;
+      source = (r.source && r.source !== 'unknown' && r.source !== 'manual') ? 'mixed' : 'manual';
+      try { byProject = r.minutes_by_project_json ? JSON.parse(r.minutes_by_project_json) : {}; } catch (e) { byProject = {}; }
+      byProject[project_slug] = (Number(byProject[project_slug]) || 0) + minutes;
+      await conn.query(
+        'UPDATE infra_activity_daily SET minutes_total=?, minutes_by_project_json=?, source=?, events_count=?, updated_at=NOW() WHERE day=?',
+        [minutes_total, JSON.stringify(byProject), source, events_count, day],
+      );
+    } else {
+      await conn.query(
+        'INSERT INTO infra_activity_daily (day, minutes_total, minutes_by_project_json, source, events_count, updated_at) VALUES (?, ?, ?, ?, ?, NOW())',
+        [day, minutes_total, JSON.stringify(byProject), source, events_count],
+      );
+    }
+
+    await conn.commit();
+    res.json({ ok: true, day, minutes_total, byProject, source });
+  } catch (e) {
+    try { if (conn) await conn.rollback(); } catch (e2) {}
+    res.status(500).json({ ok: false, error: 'manual_insert_failed' });
   } finally {
     if (conn) conn.release();
   }
