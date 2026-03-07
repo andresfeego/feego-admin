@@ -207,41 +207,52 @@ export default function SettingsPage() {
 
             <div className="space-y-3">
               {(projects || []).map((p) => (
-                <div key={p.slug} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-black/20">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold text-sm truncate">{p.name}</div>
-                    <div className="text-xs opacity-70 font-mono">{p.slug}</div>
+                <div key={p.slug} className="flex items-start gap-3 p-3 rounded-xl border border-white/10 bg-black/20">
+                  <div className="shrink-0 w-9 h-9 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center font-black text-xs">
+                    {(p.name || p.slug || '?').slice(0, 1).toUpperCase()}
                   </div>
 
-                  <input
-                    type="color"
-                    value={(p.color_hex || '#000000').startsWith('#') ? (p.color_hex || '#000000') : ('#' + (p.color_hex || '000000'))}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      setProjects((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, color_hex: v } : x)))
-                    }}
-                    className="h-10 w-10 rounded-lg border border-white/10 bg-transparent"
-                    aria-label={"Color " + p.slug}
-                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-sm leading-5 truncate">{p.name}</div>
+                    <div className="text-[11px] leading-4 text-slate-400 font-mono truncate">{p.slug}</div>
 
-                  <input
-                    value={p.color_hex || ''}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      setProjects((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, color_hex: v } : x)))
-                    }}
-                    className="w-[120px] px-3 py-2 rounded-xl border border-white/10 bg-black/20 font-mono text-xs"
-                    placeholder="#RRGGBB"
-                  />
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <input
+                        type="color"
+                        value={(p.color_hex || '#000000').startsWith('#') ? (p.color_hex || '#000000') : ('#' + (p.color_hex || '000000'))}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setProjects((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, color_hex: v } : x)))
+                        }}
+                        className="h-11 w-11 rounded-xl border border-white/10 bg-transparent p-0 overflow-hidden"
+                        aria-label={"Color " + p.slug}
+                        title={p.color_hex || ''}
+                      />
 
-                  <button
-                    onClick={() => saveProjectColor(p.slug, p.color_hex)}
-                    disabled={savingColors}
-                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm"
-                    title="Guardar"
-                  >
-                    {savingColors ? '…' : 'Guardar'}
-                  </button>
+                      <input
+                        value={p.color_hex || ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setProjects((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, color_hex: v } : x)))
+                        }}
+                        className="w-[116px] px-3 py-2 rounded-xl border border-white/10 bg-black/30 font-mono text-xs"
+                        placeholder="#RRGGBB"
+                        inputMode="text"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+
+                      <button
+                        onClick={() => saveProjectColor(p.slug, p.color_hex)}
+                        disabled={savingColors}
+                        className="ml-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shrink-0"
+                        title="Guardar"
+                      >
+                        {savingColors ? 'Guardando…' : 'Guardar'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
