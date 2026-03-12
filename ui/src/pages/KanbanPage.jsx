@@ -85,6 +85,15 @@ function ProjectAvatar({ src, sizeClass = 'w-9 h-9', iconClass = 'w-4 h-4 text-s
   )
 }
 
+function toDatetimeLocalValue(isoDate) {
+  if (!isoDate) return ''
+  const d = new Date(isoDate)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  // Use local time getters (not UTC) because <input type=datetime-local> expects local.
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function formatDueShort(isoDate) {
   if (!isoDate) return null
   const d = new Date(isoDate)
@@ -1056,7 +1065,7 @@ export default function KanbanPage() {
                   <div>
                     <div className={fieldLabelClass}>Fecha límite</div>
                     <input
-                      value={newCard.due_at ? newCard.due_at.slice(0,16) : ''}
+                      value={toDatetimeLocalValue(newCard.due_at)}
                       onChange={(e) => {
                         const v = e.target.value
                         setNewCard({ ...newCard, due_at: v ? new Date(v).toISOString() : null })
@@ -1184,7 +1193,7 @@ export default function KanbanPage() {
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <div className={fieldLabelClass}>Fecha límite</div>
-                    <input value={cardEdit.due_at ? cardEdit.due_at.slice(0,16) : ''} onChange={(e) => {
+                    <input value={toDatetimeLocalValue(cardEdit.due_at)} onChange={(e) => {
                       const v = e.target.value;
                       setCardEdit({ ...cardEdit, due_at: v ? new Date(v).toISOString() : null });
                     }} type="datetime-local" className={fieldInputClass} />
