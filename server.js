@@ -1768,6 +1768,91 @@ app.patch('/api/infra/projects/:slug', requireAuth, async (req, res) => {
 
 
 
+
+
+// Infra diary (daily summaries)
+app.get('/api/infra/diary/summary', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    const rows = await conn.query("SELECT DATE_FORMAT(day,'%Y-%m-%d') AS day, LENGTH(summary_md) AS summary_len, updated_at FROM infra_diary_daily ORDER BY day ASC");
+    const days = rows.map((r) => ({
+      day: r.day,
+      hasSummary: Number(r.summary_len || 0) > 0,
+      updated_at: r.updated_at,
+    }));
+    res.json({ ok: true, days });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.get('/api/infra/diary/day', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const day = String(req.query.day || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+    conn = await pool.getConnection();
+    const rows = await conn.query(
+      'SELECT DATE_FORMAT(day,\'%Y-%m-%d\') AS day, summary_md, raw_transcript, source, created_by, created_at, updated_at FROM infra_diary_daily WHERE day=? LIMIT 1',
+      [day],
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
+    res.json({ ok: true, entry: rows[0] });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.get('/api/infra/diary/recent', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const limitRaw = Number(req.query.limit || 10);
+    const limit = Math.max(1, Math.min(30, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 10));
+    conn = await pool.getConnection();
+    const rows = await conn.query(
+      'SELECT DATE_FORMAT(day,\'%Y-%m-%d\') AS day, summary_md, updated_at FROM infra_diary_daily ORDER BY day DESC LIMIT ?',
+      [limit],
+    );
+    res.json({ ok: true, entries: rows });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.post('/api/infra/diary/day', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const day = String((req.body && req.body.day) || '').trim();
+    const summary_md = String((req.body && req.body.summary_md) || '').trim();
+    const raw_transcript = String((req.body && req.body.raw_transcript) || '').trim();
+    const source = String((req.body && req.body.source) || 'manual').trim() || 'manual';
+    const created_by = String((req.body && req.body.created_by) || 'admin').trim() || 'admin';
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+
+    conn = await pool.getConnection();
+    await conn.query(
+      `INSERT INTO infra_diary_daily (day, summary_md, raw_transcript, source, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+       ON DUPLICATE KEY UPDATE summary_md=VALUES(summary_md), raw_transcript=VALUES(raw_transcript), source=VALUES(source), created_by=VALUES(created_by), updated_at=NOW()`,
+      [day, summary_md, raw_transcript, source, created_by],
+    );
+    res.json({ ok: true, day });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'upsert_failed' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+
 // Infra activity (calendar)
 app.get('/api/infra/activity/summary', requireAuth, async (req, res) => {
   let conn;

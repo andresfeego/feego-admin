@@ -10,6 +10,7 @@ import KanbanPage from './pages/KanbanPage.jsx'
 import MarketingPage from './pages/MarketingPage.jsx'
 import QuotesPage from './pages/QuotesPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
+import DiaryPage from './pages/DiaryPage.jsx'
 
 function Sidebar() {
   const loc = useLocation()
@@ -34,6 +35,7 @@ function Sidebar() {
       <div className="text-xs text-slate-400 mb-3">Menú</div>
       <nav className="space-y-2">
         <Link className={`block rounded-lg px-3 py-2 border ${active('/dashboard')}`} to="/dashboard">Dashboard</Link>
+        <Link className={`block rounded-lg px-3 py-2 border ${active('/diario')}`} to="/diario">Diario</Link>
         <Link className={`block rounded-lg px-3 py-2 border ${active('/uploads')}`} to="/uploads">Uploads</Link>
         <Link className={`block rounded-lg px-3 py-2 border ${active('/kanban')}`} to="/kanban">Kanban</Link>
         <Link className={`block rounded-lg px-3 py-2 border ${active('/site')}`} to="/site">Sitio (FeegoSystem)</Link>
@@ -70,6 +72,7 @@ function MobileHeader() {
             <div className="text-xs text-slate-400 mb-3">Menú</div>
             <nav className="space-y-2">
               <Link onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 border border-white/10 bg-white/5" to="/dashboard">Dashboard</Link>
+              <Link onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 border border-white/10 bg-white/5" to="/diario">Diario</Link>
               <Link onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 border border-white/10 bg-white/5" to="/uploads">Uploads</Link>
               <Link onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 border border-white/10 bg-white/5" to="/kanban">Kanban</Link>
               <Link onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 border border-white/10 bg-white/5" to="/site">Sitio (FeegoSystem)</Link>
@@ -156,7 +159,16 @@ function Layout() {
             <Route path="/quotes" element={<RequireAuth><QuotesPage /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
 
-            <Route
+                        <Route
+              path="/diario"
+              element={
+                <RequireAuth>
+                  <DiaryPage />
+                </RequireAuth>
+              }
+            />
+
+<Route
               path="/dashboard"
               element={
                 <RequireAuth>
