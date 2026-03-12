@@ -628,22 +628,7 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
-              onClick={async () => {
-                try {
-                  setActivityLoading(true)
-                  const ra = await api('/api/infra/activity/summary')
-                  if (ra.ok) setActivitySummary(ra.data)
-                } finally {
-                  setActivityLoading(false)
-                }
-              }}
-              disabled={activityLoading || activityRecomputing}
-            >
-              Refrescar
-            </button>
-            <button
+<button
               className="px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-100"
               onClick={async () => {
                 try {
