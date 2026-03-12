@@ -2686,6 +2686,7 @@ app.delete('/api/kanban/project/permanent', requireAuth, async (req, res) => {
 
 app.post('/api/kanban/card', requireAuth, async (req, res) => {
   const title = String((req.body && req.body.title) || '').trim();
+  const notes = String((req.body && req.body.notes) || '');
   const project_id = Number((req.body && req.body.project_id) || 0) || null;
   const board = String((req.body && req.body.board) || 'ideas');
   const statusRaw = String((req.body && req.body.status) || 'n/a');
@@ -2698,6 +2699,16 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
       ...(section_id_raw ? [section_id_raw] : []),
     ].filter((x) => Number.isInteger(x) && x > 0)
   ));
+  const due_at_raw = (req.body && req.body.due_at) ? String(req.body.due_at) : null; // UI sends ISO
+  const due_at = (() => {
+    if (!due_at_raw) return null;
+    const d = new Date(due_at_raw);
+    if (isNaN(d.getTime())) return null;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  })();
+  const priority = (req.body && req.body.priority != null) ? Number(req.body.priority) : null;
+  const labels = (req.body && req.body.labels) ? req.body.labels : [];
   if (!title) return res.status(400).json({ ok: false });
   let conn;
   try {
@@ -2723,16 +2734,16 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
     const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
     if (supportsSectionIdsJson) {
       await conn.query(
-        'INSERT INTO kb_cards (title, project_id, board, status, sort, section_id, section_ids_json) VALUES (?,?,?,?,?,?,?)',
-        [title, project_id, board, status, insertSort, primarySectionId, JSON.stringify(section_ids)]
+        'INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_ids_json, due_at, priority, labels_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        [title, notes, project_id, board, status, insertSort, primarySectionId, JSON.stringify(section_ids), due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : [])]
       );
     } else {
       const namesById = new Map((sectionRows || []).map((r) => [Number(r.id), String(r.name || '')]));
       const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
       const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
       await conn.query(
-        'INSERT INTO kb_cards (title, project_id, board, status, sort, section_id, section_name) VALUES (?,?,?,?,?,?,?)',
-        [title, project_id, board, status, insertSort, primarySectionId, sectionNameSerialized]
+        'INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_name, due_at, priority, labels_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        [title, notes, project_id, board, status, insertSort, primarySectionId, sectionNameSerialized, due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : [])]
       );
     }
     res.json({ ok: true });

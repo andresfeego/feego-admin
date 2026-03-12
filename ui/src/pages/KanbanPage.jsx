@@ -313,7 +313,7 @@ export default function KanbanPage() {
   const [cardEdit, setCardEdit] = React.useState({ id: 0, title: '', notes: '', project_id: null, section_id: null, section_ids: [], due_at: null, priority: null, labels: [] })
 
   const [newCardOpen, setNewCardOpen] = React.useState(false)
-  const [newCard, setNewCard] = React.useState({ title: '', notes: '', project_id: null, section_id: null, section_ids: [], priority: 3 })
+  const [newCard, setNewCard] = React.useState({ title: '', notes: '', project_id: null, section_id: null, section_ids: [], due_at: null, priority: 3 })
 
   function openNewCard(project_id = null) {
     setNewCard({ title: '', notes: '', project_id, section_id: null, section_ids: [], priority: 3, labels: [] })
@@ -1054,6 +1054,18 @@ export default function KanbanPage() {
 
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
+                    <div className={fieldLabelClass}>Fecha límite</div>
+                    <input
+                      value={newCard.due_at ? newCard.due_at.slice(0,16) : ''}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setNewCard({ ...newCard, due_at: v ? new Date(v).toISOString() : null })
+                      }}
+                      type="datetime-local"
+                      className={fieldInputClass}
+                    />
+                  </div>
+                  <div>
                     <div className={fieldLabelClass}>Prioridad</div>
                     <select value={newCard.priority || ''} onChange={(e) => setNewCard({ ...newCard, priority: e.target.value ? Number(e.target.value) : null })} className={fieldInputClass}>
                       <option value="">—</option>
@@ -1087,6 +1099,7 @@ export default function KanbanPage() {
                   project_id: newCard.project_id,
                   section_id: newCard.section_id,
                   priority: newCard.priority,
+                  due_at: newCard.due_at,
                   section_ids: Array.isArray(newCard.section_ids) ? newCard.section_ids : [],
                   board: 'ideas',
                   status: 'todo',
