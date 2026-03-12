@@ -1,7 +1,7 @@
 import React from 'react'
 import Holidays from 'date-holidays'
 import Calendar from 'react-calendar'
-import 'react-calendar/dist/Calendar.css'
+import '../styles/calendar-min.css'
 import { api } from '../lib/api.js'
 
 function Card({ className = '', children }) {
@@ -64,7 +64,7 @@ export default function DiaryPage() {
   const [dayOpen, setDayOpen] = React.useState(false)
   const [dayEntry, setDayEntry] = React.useState(null)
 
-  const [recentOpen, setRecentOpen] = React.useState(false)
+  const [recentExpanded, setRecentExpanded] = React.useState(false)
   const [recent, setRecent] = React.useState([])
   const [recentLoading, setRecentLoading] = React.useState(false)
 
@@ -89,28 +89,9 @@ export default function DiaryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[32px] leading-[40px] font-bold">Diario</div>
-          <div className="text-sm leading-5 text-slate-400">Resumen diario por fecha (texto). Fuente: entradas guardadas en BD.</div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
-            onClick={async () => {
-              try {
-                setRecentLoading(true)
-                const r = await api('/api/infra/diary/recent?limit=10')
-                if (r.ok) setRecent(r.data.entries || [])
-                setRecentOpen(true)
-              } finally {
-                setRecentLoading(false)
-              }
-            }}
-          >
-            {recentLoading ? 'Cargando…' : 'Ver últimos 10 días'}
-          </button>
-        </div>
+      <div>
+        <div className="text-[32px] leading-[40px] font-bold">Diario</div>
+        <div className="text-sm leading-5 text-slate-400">Resumen diario por fecha (texto). Fuente: entradas guardadas en BD.</div>
       </div>
 
       <Card className="p-3">
@@ -167,6 +148,43 @@ export default function DiaryPage() {
             }}
           />
         </div>
+
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <button
+            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
+            onClick={async () => {
+              if (!recentExpanded) {
+                try {
+                  setRecentLoading(true)
+                  const r = await api('/api/infra/diary/recent?limit=10')
+                  if (r.ok) setRecent(r.data.entries || [])
+                } finally {
+                  setRecentLoading(false)
+                }
+              }
+              setRecentExpanded((v) => !v)
+            }}
+          >
+            {recentLoading ? 'Cargando…' : (recentExpanded ? 'Ocultar últimos 10 días' : 'Ver últimos 10 días')}
+          </button>
+
+          {recentExpanded ? (
+            <div className="mt-4 space-y-2">
+              {!recent || recent.length === 0 ? <div className="text-sm text-slate-400">—</div> : null}
+              {(recent || []).map((e) => (
+                <details key={e.day} className="group rounded-xl border border-white/10 bg-white/5">
+                  <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="font-mono text-sm text-slate-200">{e.day}</div>
+                    <div className="text-xs text-slate-400">{e.updated_at ? fmtBogota(e.updated_at) : ''}</div>
+                  </summary>
+                  <div className="px-4 pb-4">
+                    <pre className="text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(e.summary_md || '—').trim() || '—'}</pre>
+                  </div>
+                </details>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </Card>
 
       <Modal open={dayOpen} onClose={() => setDayOpen(false)} title={dayEntry ? ('Diario ' + dayEntry.day) : 'Diario'}>
@@ -184,21 +202,6 @@ export default function DiaryPage() {
             </Card>
           </div>
         )}
-      </Modal>
-
-      <Modal open={recentOpen} onClose={() => setRecentOpen(false)} title="Últimos 10 días">
-        <div className="space-y-3">
-          {!recent || recent.length === 0 ? <div className="text-sm text-slate-400">—</div> : null}
-          {(recent || []).map((e) => (
-            <Card key={e.day} className="p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-mono text-sm text-slate-200">{e.day}</div>
-                <div className="text-xs text-slate-400">{e.updated_at ? fmtBogota(e.updated_at) : ''}</div>
-              </div>
-              <pre className="mt-3 text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(e.summary_md || '—').trim() || '—'}</pre>
-            </Card>
-          ))}
-        </div>
       </Modal>
     </div>
   )
