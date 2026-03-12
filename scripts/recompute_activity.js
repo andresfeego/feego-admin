@@ -314,8 +314,17 @@ async function main() {
       const manualRows = await conn.query(
         "SELECT day, project_slug, SUM(minutes) AS minutes, COUNT(*) AS c FROM infra_activity_segments WHERE source='manual' GROUP BY day, project_slug"
       );
+      function dayKey(v) {
+        if (!v) return '';
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        const s = String(v);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+        return m ? m[1] : s;
+      }
+
       for (const r of manualRows) {
-        const dk = String(r.day);
+        const dk = dayKey(r.day);
         const proj = String(r.project_slug || 'unknown');
         const mins = Number(r.minutes || 0) || 0;
         if (!mins) continue;
