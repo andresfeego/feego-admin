@@ -28,6 +28,14 @@ const PROJECTS = [
     ],
   },
   {
+    slug: 'viralco',
+    name: 'Viralco',
+    status: 'active',
+    repo_url: null,
+    domains: [],
+    branches: [],
+  },
+  {
     slug: 'mako',
     name: 'Mako',
     status: 'migrated',
