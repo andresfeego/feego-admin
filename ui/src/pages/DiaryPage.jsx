@@ -95,9 +95,19 @@ export default function DiaryPage() {
       </div>
 
       <Card className="p-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-slate-200 font-bold">{monthLabelBogota(activeDate)}</div>
-          <div className="text-xs text-slate-400">Click en un día para ver el resumen</div>
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-slate-400">Click en un día para ver el resumen</div>
+            <button
+              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs"
+              onClick={async () => { await loadSummary() }}
+              disabled={loading}
+              title="Actualizar la vista del calendario"
+            >
+              {loading ? "Actualizando…" : "Refrescar calendario"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-3">
