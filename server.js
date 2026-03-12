@@ -1844,7 +1844,7 @@ app.post('/api/infra/diary/day', requireAuth, async (req, res) => {
        ON DUPLICATE KEY UPDATE summary_md=VALUES(summary_md), raw_transcript=VALUES(raw_transcript), source=VALUES(source), created_by=VALUES(created_by), updated_at=NOW()`,
       [day, summary_md, raw_transcript, source, created_by],
     );
-    res.json({ ok: true, day });
+    res.json({ ok: true, day, status: saved });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'upsert_failed' });
   } finally {
