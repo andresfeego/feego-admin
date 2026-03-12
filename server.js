@@ -51,6 +51,7 @@ const CONTEXT_FILES = {
   sisproind: { label: 'Sisproind', rel: 'proyectos/sisproind.md' },
   mercypersonalizados: { label: 'Mercy Personalizados', rel: 'proyectos/mercypersonalizados.md' },
   comopreparar: { label: 'ComoPreparar', rel: 'proyectos/comopreparar.md' },
+  viralco: { label: 'Viralco', rel: 'proyectos/viralco.md' },
 };
 function contextPathForKey(key) {
   const spec = CONTEXT_FILES[key];
@@ -70,6 +71,7 @@ function contextKeyForProjectSlug(slug) {
   if (slug === 'sisproind') return 'sisproind';
   if (slug === 'mercypersonalizados') return 'mercypersonalizados';
   if (slug === 'comopreparar') return 'comopreparar';
+  if (slug === 'viralco') return 'viralco';
   return null;
 }
 
