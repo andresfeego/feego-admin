@@ -1941,7 +1941,7 @@ app.get('/api/infra/diary/day-items', requireAuth, async (req, res) => {
   let conn;
   try {
     const day = String(req.query.day || '').trim();
-    if (!/^d{4}-d{2}-d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
 
     conn = await pool.getConnection();
 
