@@ -80,6 +80,11 @@ export default function DiaryPage() {
     }
   }
 
+  async function loadDayRowsFor(day) {
+    await loadDayRowsFor(day)
+  }
+
+
   React.useEffect(() => {
     loadSummary()
   }, [])
@@ -217,7 +222,12 @@ export default function DiaryPage() {
               <div className="mt-1 text-sm text-slate-200 font-mono">{dayEntry.updated_at ? fmtBogota(dayEntry.updated_at) : '—'}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-slate-400">Ítems (visual)</div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-slate-400">Ítems (visual)</div>
+                <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayRowsFor(dayEntry.day) : null}>
+                  Refrescar
+                </button>
+              </div>
               {dayRowsLoading ? <div className="mt-2 text-sm text-slate-400">Cargando…</div> : null}
               {!dayRowsLoading && (!dayRows || dayRows.length === 0) ? <div className="mt-2 text-sm text-slate-400">—</div> : null}
 
