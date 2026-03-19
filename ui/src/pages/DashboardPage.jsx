@@ -360,6 +360,8 @@ function Pie({ data, total, colors }) {
   )
 }
 
+const HIDDEN_PROJECT_SLUGS = new Set(['davivienda', 'vivienda']);
+
 export default function DashboardPage() {
   const [st, setSt] = React.useState(null)
   const [ov, setOv] = React.useState(null)
@@ -515,7 +517,7 @@ export default function DashboardPage() {
           ) : null}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {(infraProjects || []).map((p) => (
+          {(infraProjects || []).filter((p) => !HIDDEN_PROJECT_SLUGS.has(p.slug)).map((p) => (
             <ProjectCard key={p.slug} p={p} onClick={async () => {
               setActiveProject(p)
               setActiveProjectMd(null)
