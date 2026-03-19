@@ -246,12 +246,7 @@ export default function DiaryPage() {
               ) : null}
             </Card>
 
-            <Card className="p-4">
-              <div className="text-xs text-slate-400">Resumen (texto)</div>
-              <div className="mt-3">
-                <pre className="text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(dayEntry.summary_md || '—').trim() || '—'}</pre>
-              </div>
-            </Card>
+            
           </div>
         )}
       </Modal>
