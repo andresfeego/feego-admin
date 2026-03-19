@@ -1912,6 +1912,75 @@ app.get('/api/infra/diary/summary', requireAuth, async (req, res) => {
   }
 });
 
+
+
+function fmtRangeBogotaFromUtc(startIso, endIso) {
+  try {
+    const tz = 'America/Bogota';
+    const fmt = (iso) => new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+    return fmt(startIso) + '–' + fmt(endIso);
+  } catch {
+    return '';
+  }
+}
+
+app.get('/api/infra/diary/items', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    const rows = await conn.query("SELECT slug, name, icon, sort_order, status FROM infra_diary_items WHERE status='active' ORDER BY sort_order ASC, name ASC");
+    res.json({ ok: true, items: rows || [] });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.get('/api/infra/diary/day-items', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const day = String(req.query.day || '').trim();
+    if (!/^d{4}-d{2}-d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+
+    conn = await pool.getConnection();
+
+    const items = await conn.query("SELECT slug, name, icon, sort_order FROM infra_diary_items WHERE status='active' ORDER BY sort_order ASC, name ASC");
+
+    // Aggregate activity segments for the day (manual + exec + chat). UTC timestamps stored.
+    const segs = await conn.query(
+      "SELECT project_slug, MIN(start_at) AS start_at, MAX(end_at) AS end_at, SUM(minutes) AS minutes, GROUP_CONCAT(DISTINCT notes SEPARATOR ' | ') AS notes FROM infra_activity_segments WHERE day=STR_TO_DATE(?, '%Y-%m-%d') GROUP BY project_slug",
+      [day]
+    );
+
+    const bySlug = new Map();
+    for (const r of (segs || [])) {
+      bySlug.set(String(r.project_slug || ''), r);
+    }
+
+    const rows = (items || []).map((it) => {
+      const seg = bySlug.get(it.slug);
+      if (!seg) {
+        return { slug: it.slug, name: it.name, icon: it.icon, range: '', minutes: 0, comment: '' };
+      }
+      const start = seg.start_at;
+      const end = seg.end_at;
+      const range = (start && end) ? fmtRangeBogotaFromUtc(start, end) : '';
+      const comment = (seg.notes || '').trim();
+      return { slug: it.slug, name: it.name, icon: it.icon, range, minutes: Number(seg.minutes || 0), comment };
+    });
+
+    // Keep only rows with activity, but allow showing empty later if desired.
+    const activeRows = rows.filter((r) => r.minutes > 0 || r.range || r.comment);
+
+    res.json({ ok: true, day, rows: activeRows });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 app.get('/api/infra/diary/day', requireAuth, async (req, res) => {
   let conn;
   try {

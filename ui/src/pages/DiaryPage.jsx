@@ -3,6 +3,7 @@ import Holidays from 'date-holidays'
 import Calendar from 'react-calendar'
 import '../styles/calendar-min.css'
 import { api } from '../lib/api.js'
+import * as Icons from 'lucide-react'
 
 function Card({ className = '', children }) {
   return <div className={`rounded-2xl border border-white/10 bg-white/5 ${className}`}>{children}</div>
@@ -63,6 +64,8 @@ export default function DiaryPage() {
 
   const [dayOpen, setDayOpen] = React.useState(false)
   const [dayEntry, setDayEntry] = React.useState(null)
+  const [dayRows, setDayRows] = React.useState([])
+  const [dayRowsLoading, setDayRowsLoading] = React.useState(false)
 
   const [recentExpanded, setRecentExpanded] = React.useState(false)
   const [recent, setRecent] = React.useState([])
@@ -144,15 +147,25 @@ export default function DiaryPage() {
               const day = dayKeyBogota(date)
               try {
                 const r = await api('/api/infra/diary/day?day=' + encodeURIComponent(day))
+                try {
+                  setDayRowsLoading(true)
+                  const rr = await api('/api/infra/diary/day-items?day=' + encodeURIComponent(day))
+                  if (rr.ok) setDayRows(rr.data.rows || [])
+                  else setDayRows([])
+                } finally {
+                  setDayRowsLoading(false)
+                }
                 if (r.ok) {
                   setDayEntry(r.data.entry)
                   setDayOpen(true)
                 } else {
                   setDayEntry({ day, summary_md: '', updated_at: null })
+                  setDayRows([])
                   setDayOpen(true)
                 }
               } catch {
                 setDayEntry({ day, summary_md: '', updated_at: null })
+                setDayRows([])
                 setDayOpen(true)
               }
             }}
@@ -204,6 +217,44 @@ export default function DiaryPage() {
               <div className="text-xs text-slate-400">Actualizado</div>
               <div className="mt-1 text-sm text-slate-200 font-mono">{dayEntry.updated_at ? fmtBogota(dayEntry.updated_at) : '—'}</div>
             </Card>
+            <Card className="p-4">
+              <div className="text-xs text-slate-400">Ítems (visual)</div>
+              {dayRowsLoading ? <div className="mt-2 text-sm text-slate-400">Cargando…</div> : null}
+              {!dayRowsLoading && (!dayRows || dayRows.length === 0) ? <div className="mt-2 text-sm text-slate-400">—</div> : null}
+
+              {dayRows && dayRows.length ? (
+                <div className="mt-3 overflow-auto rounded-xl border border-white/10">
+                  <table className="w-full text-sm">
+                    <thead className="bg-white/5">
+                      <tr className="text-left">
+                        <th className="p-3 w-[56px]">Icono</th>
+                        <th className="p-3">Ítem</th>
+                        <th className="p-3 w-[160px]">Horas</th>
+                        <th className="p-3">Comentario</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dayRows.map((r) => {
+                        const Icon = (Icons && r.icon && Icons[r.icon]) ? Icons[r.icon] : Icons.X
+                        return (
+                          <tr key={r.slug} className="border-t border-white/10">
+                            <td className="p-3">
+                              <div className="w-9 h-9 grid place-items-center rounded-lg bg-black/30 border border-white/10">
+                                <Icon size={18} className="text-slate-200" />
+                              </div>
+                            </td>
+                            <td className="p-3 font-medium text-slate-100">{r.name}</td>
+                            <td className="p-3 font-mono text-xs text-slate-300">{r.range || '—'}</td>
+                            <td className="p-3 text-slate-300">{r.comment || '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </Card>
+
             <Card className="p-4">
               <div className="text-xs text-slate-400">Resumen (texto)</div>
               <div className="mt-3">
