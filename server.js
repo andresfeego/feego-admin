@@ -1770,6 +1770,129 @@ app.patch('/api/infra/projects/:slug', requireAuth, async (req, res) => {
 
 
 
+
+
+// Infra project status (live checks)
+const { execFile } = require('child_process');
+
+function execFileP(cmd, args, opts = {}) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: opts.timeoutMs || 4000 }, (err, stdout, stderr) => {
+      resolve({ ok: !err, code: err && typeof err.code === 'number' ? err.code : null, stdout: String(stdout || '').trim(), stderr: String(stderr || '').trim() });
+    });
+  });
+}
+
+async function systemdActive(service) {
+  const r = await execFileP('systemctl', ['is-active', service], { timeoutMs: 2500 });
+  return r.ok && r.stdout === 'active';
+}
+
+async function dockerRunning(container) {
+  const r = await execFileP('docker', ['inspect', '-f', '{{.State.Status}}', container], { timeoutMs: 2500 });
+  return r.ok && r.stdout === 'running';
+}
+
+async function httpOk(url, hostOverride) {
+  // hostOverride: { host, ip } to force localhost resolution via --resolve
+  const args = ['-fsS', '--max-time', '3'];
+  if (hostOverride && hostOverride.host && hostOverride.ip) {
+    args.push('--resolve', hostOverride.host + ':443:' + hostOverride.ip);
+  }
+  args.push(url);
+  const r = await execFileP('curl', args, { timeoutMs: 4000 });
+  return r.ok;
+}
+
+app.get('/api/infra/project-status', requireAuth, async (req, res) => {
+  try {
+    // Mapping: keep minimal and explicit.
+    const cfg = {
+      altezza: {
+        name: 'Altezza',
+        front: {
+          lab: { kind: 'docker', container: 'mievento-lab', port: 3101, url: 'https://lab-mievento.altezzaeventos.in/__version', host: 'lab-mievento.altezzaeventos.in' },
+          prod: { kind: 'docker', container: 'mievento-prod', port: 3100, url: 'https://mievento.altezzaeventos.in/__version', host: 'mievento.altezzaeventos.in' },
+        },
+        back: {
+          lab: { kind: 'systemd', service: 'backend-altezza.service', port: 3022 },
+          prod: null,
+        },
+        db: { lab: null, prod: { name: 'feegosys_Altezza' } },
+      },
+      mako: {
+        name: 'Mako',
+        front: {
+          lab: { kind: 'docker', container: 'web-mako-lab', port: 3102, url: 'https://lab-mako.mako.guru/__version', host: 'lab-mako.mako.guru' },
+          prod: { kind: 'docker', container: 'web-mako-prod', port: 3103, url: 'https://mako.guru/__version', host: 'mako.guru' },
+        },
+        back: {
+          lab: { kind: 'systemd', service: 'backend-mako-lab.service', port: 3032 },
+          prod: { kind: 'systemd', service: 'backend-mako-prod.service', port: 3033 },
+        },
+        db: { lab: { name: 'feegosys_mako_lab' }, prod: { name: 'feegosys_mako_prod' } },
+      },
+      sisproind: {
+        name: 'SISPROIND',
+        front: { lab: null, prod: null },
+        back: {
+          lab: { kind: 'systemd', service: 'backend-sisproind-lab.service', port: 3031 },
+          prod: { kind: 'systemd', service: 'backend-sisproind.service', port: 3021 },
+        },
+        db: { lab: { name: 'feegosys_sisproind_lab' }, prod: { name: 'feegosys_sisproind' } },
+      },
+      viralco: {
+        name: 'ViralCo',
+        front: { lab: null, prod: null },
+        back: { lab: null, prod: { kind: 'systemd', service: 'backend-viralco.service', port: 3023 } },
+        db: { lab: null, prod: { name: 'feegosys_viralco' } },
+      },
+    };
+
+    const ip = '127.0.0.1';
+
+    const slugs = Object.keys(cfg);
+    const out = [];
+
+    for (const slug of slugs) {
+      const c = cfg[slug];
+
+      async function evalFront(x) {
+        if (!x) return { exists: false, ok: null };
+        const running = x.container ? await dockerRunning(x.container) : null;
+        const urlOk = x.url ? await httpOk(x.url, x.host ? { host: x.host, ip } : null) : null;
+        const ok = (running === null ? true : running) && (urlOk === null ? true : urlOk);
+        return { exists: true, ok, running, urlOk, container: x.container || null, port: x.port || null, url: x.url || null };
+      }
+
+      async function evalBack(x) {
+        if (!x) return { exists: false, ok: null };
+        const active = x.service ? await systemdActive(x.service) : null;
+        const ok = (active === null ? true : active);
+        return { exists: true, ok, active, service: x.service || null, port: x.port || null };
+      }
+
+      const frontLab = await evalFront(c.front && c.front.lab);
+      const frontProd = await evalFront(c.front && c.front.prod);
+      const backLab = await evalBack(c.back && c.back.lab);
+      const backProd = await evalBack(c.back && c.back.prod);
+
+      out.push({
+        slug,
+        name: c.name,
+        front: { lab: frontLab, prod: frontProd },
+        back: { lab: backLab, prod: backProd },
+        db: c.db || { lab: null, prod: null },
+      });
+    }
+
+    res.json({ ok: true, projects: out, now: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'status_failed' });
+  }
+});
+
+
 // Infra diary (daily summaries)
 app.get('/api/infra/diary/summary', requireAuth, async (req, res) => {
   let conn;
