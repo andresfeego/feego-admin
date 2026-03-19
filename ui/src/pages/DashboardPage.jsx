@@ -504,63 +504,7 @@ export default function DashboardPage() {
       
 
       <Section title="Proyectos">
-        <div className="mb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-bold">Estado (LAB/PROD)</div>
-              <div className="text-xs text-slate-400">Back / Front / DB (semáforo)</div>
-            </div>
-            <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" onClick={() => refreshProjectStatus({ showOverlay: true })}>
-              Refrescar estado
-            </button>
-          </div>
-
-          <div className="relative mt-3">
-            {projectStatusLoading ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl">
-                <div className="text-sm text-slate-200">Cargando estado…</div>
-              </div>
-            ) : null}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {(projectStatus || []).map((ps) => {
-                const pill = (ok) => ok === true ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/30' : ok === false ? 'bg-red-500/15 text-red-200 border-red-500/30' : 'bg-slate-500/10 text-slate-200 border-white/10'
-                const label = (ok) => ok === true ? 'OK' : ok === false ? 'FALLA' : '—'
-                return (
-                  <div key={ps.slug} className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="font-bold">{ps.name}</div>
-                      <div className="text-xs text-slate-400 font-mono">{ps.slug}</div>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-xs text-slate-400">LAB</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.front?.lab?.ok)} >Front {label(ps.front?.lab?.ok)}</span>
-                          <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.back?.lab?.ok)} >Back {label(ps.back?.lab?.ok)}</span>
-                          <span className={"px-2 py-1 rounded-md border text-xs bg-white/5 border-white/10"} >DB {ps.db?.lab?.name || '—'}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400">PROD</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.front?.prod?.ok)} >Front {label(ps.front?.prod?.ok)}</span>
-                          <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.back?.prod?.ok)} >Back {label(ps.back?.prod?.ok)}</span>
-                          <span className="px-2 py-1 rounded-md border text-xs bg-white/5 border-white/10" >DB {ps.db?.prod?.name || '—'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 text-xs text-slate-400">
-                      {ps.front?.lab?.url ? (<div className="font-mono">LAB /__version: {ps.front.lab.url}</div>) : null}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
+        
         <div className="relative">
                 {!projectsLoading && (infraProjects || []).length === 0 ? <div className="text-sm text-slate-400">No hay proyectos registrados.</div> : null}
 
@@ -601,6 +545,54 @@ export default function DashboardPage() {
       <Modal open={!!activeProject} onClose={() => { setActiveProject(null); setActiveProjectMd(null); setActiveProjectRules(null) }} title={activeProject ? activeProject.name : ''}>
         {!activeProject ? null : (
           <div className="space-y-4">
+<Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs feego-muted">Estado del proyecto (LAB/PROD)</div>
+                  <div className="mt-1 text-xs text-slate-400">Front / Back / DB</div>
+                </div>
+                <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" onClick={() => refreshProjectStatus({ showOverlay: true })}>
+                  Refrescar
+                </button>
+              </div>
+
+              {(() => {
+                const ps = (projectStatus || []).find((x) => x.slug === activeProject?.slug)
+                if (!ps) return <div className="mt-2 text-sm text-slate-400">No hay estado para este proyecto.</div>
+
+                const pill = (ok) => ok === true ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/30' : ok === false ? 'bg-red-500/15 text-red-200 border-red-500/30' : 'bg-slate-500/10 text-slate-200 border-white/10'
+                const label = (ok) => ok === true ? 'OK' : ok === false ? 'FALLA' : '—'
+
+                return (
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <div className="text-xs text-slate-400">LAB</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.front?.lab?.ok)}>Front {label(ps.front?.lab?.ok)}</span>
+                        <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.back?.lab?.ok)}>Back {label(ps.back?.lab?.ok)}</span>
+                        <span className="px-2 py-1 rounded-md border text-xs bg-white/5 border-white/10">DB {ps.db?.lab?.name || '—'}</span>
+                      </div>
+                      {ps.front?.lab?.url ? <div className="mt-2 text-xs text-slate-400 font-mono">/__version: {ps.front.lab.url}</div> : null}
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <div className="text-xs text-slate-400">PROD</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.front?.prod?.ok)}>Front {label(ps.front?.prod?.ok)}</span>
+                        <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.back?.prod?.ok)}>Back {label(ps.back?.prod?.ok)}</span>
+                        <span className="px-2 py-1 rounded-md border text-xs bg-white/5 border-white/10">DB {ps.db?.prod?.name || '—'}</span>
+                      </div>
+                      {ps.front?.prod?.url ? <div className="mt-2 text-xs text-slate-400 font-mono">/__version: {ps.front.prod.url}</div> : null}
+                    </div>
+
+                    {projectStatusLoading ? (
+                      <div className="md:col-span-2 text-sm text-slate-400">Cargando estado…</div>
+                    ) : null}
+                  </div>
+                )
+              })()}
+            </Card>
+
             <Card className="p-4">
               <div className="text-xs feego-muted">GitHub</div>
               <div className="mt-2 text-sm">
