@@ -3,7 +3,6 @@ import Holidays from 'date-holidays'
 import Calendar from 'react-calendar'
 import '../styles/calendar-min.css'
 import { api } from '../lib/api.js'
-import * as Icons from 'lucide-react'
 
 function Card({ className = '', children }) {
   return <div className={`rounded-2xl border border-white/10 bg-white/5 ${className}`}>{children}</div>
@@ -226,23 +225,15 @@ export default function DiaryPage() {
                 <div className="mt-3 overflow-auto rounded-xl border border-white/10">
                   <table className="w-full text-sm">
                     <thead className="bg-white/5">
-                      <tr className="text-left">
-                        <th className="p-3 w-[56px]">Icono</th>
-                        <th className="p-3">Ítem</th>
-                        <th className="p-3 w-[160px]">Horas</th>
+                      <tr className="text-left">                        <th className="p-3">Ítem</th>
+                        <th className="p-3 w-[180px]">Horas</th>
                         <th className="p-3">Comentario</th>
                       </tr>
                     </thead>
                     <tbody>
                       {dayRows.map((r) => {
-                        const Icon = (Icons && r.icon && Icons[r.icon]) ? Icons[r.icon] : Icons.X
                         return (
                           <tr key={r.slug} className="border-t border-white/10">
-                            <td className="p-3">
-                              <div className="w-9 h-9 grid place-items-center rounded-lg bg-black/30 border border-white/10">
-                                <Icon size={18} className="text-slate-200" />
-                              </div>
-                            </td>
                             <td className="p-3 font-medium text-slate-100">{r.name}</td>
                             <td className="p-3 font-mono text-xs text-slate-300">{r.range || '—'}</td>
                             <td className="p-3 text-slate-300">{r.comment || '—'}</td>
