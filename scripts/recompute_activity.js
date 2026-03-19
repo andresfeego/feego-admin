@@ -47,6 +47,10 @@ function parseJsonLines(p) {
 function projectFromWorkdirOrCommand(workdir, command) {
   const wd = workdir || '';
   const cmd = command || '';
+  // Infer by command/path when workdir is empty (common in audit logs)
+  if (wd.includes('/opt/stacks/mako') || cmd.includes('/opt/stacks/mako')) return 'mako';
+  if (wd.includes('/opt/apps/backend-mako') || cmd.includes('/opt/apps/backend-mako')) return 'mako';
+  if (cmd.includes('web-mako') || cmd.includes('backend-mako')) return 'mako';
   if (wd.startsWith('/opt/feego-admin')) return 'feego';
   if (wd.includes('/opt/stacks/mievento')) return 'altezza';
   if (wd.startsWith('/srv/mako') || cmd.includes('/srv/mako')) return 'mako';
