@@ -1427,7 +1427,7 @@ app.post('/api/branding/logo', requireAuth, brandingUpload.single('logo'), async
       .resize({ width: 1200, height: 400, fit: 'inside', withoutEnlargement: true })
       .png({ compressionLevel: 9 })
       .toFile(logoFile);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch {
     res.status(500).json({ ok: false });
   }
@@ -1486,7 +1486,7 @@ app.post('/api/branding/signature', requireAuth, brandingUpload.single('signatur
       .resize({ width: 900, height: 260, fit: 'inside', withoutEnlargement: true })
       .png({ compressionLevel: 9 })
       .toFile(signatureFile);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch {
     res.status(500).json({ ok: false });
   }
@@ -1540,7 +1540,7 @@ app.post('/api/login', async (req, res) => {
     req.session.username = u.username;
     req.session.save((err) => {
       if (err) return res.status(500).json({ ok: false });
-      res.json({ ok: true, mustChange: !!u.must_change_password });
+      res.json({ ok: true });
     });
   } catch (e) {
     res.status(500).json({ ok: false });
@@ -1564,7 +1564,7 @@ app.post('/api/account/password', requireAuth, async (req, res) => {
     conn = await pool.getConnection();
     const hash = await bcrypt.hash(pw, 10);
     await conn.query('UPDATE users SET password_hash=?, must_change_password=0, updated_at=NOW() WHERE id=?', [hash, req.session.userId]);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch {
     res.status(500).json({ ok: false });
   } finally {
@@ -1592,7 +1592,7 @@ app.post('/api/infra/ui-log', requireAuth, (req, res) => {
       ...payload
     }) + '\n';
     fs.appendFileSync(UI_LOG_PATH, line);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch {
     res.status(500).json({ ok: false });
   }
@@ -2036,7 +2036,7 @@ app.post('/api/infra/diary/goals/toggle', requireAuth, async (req, res) => {
       "UPDATE infra_diary_goals SET status=?, checked_at=IF(?, NOW(), NULL), updated_at=NOW() WHERE id=?",
       [status, done ? 1 : 0, id],
     );
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
@@ -2055,7 +2055,7 @@ app.post('/api/infra/diary/goals/update', requireAuth, async (req, res) => {
 
     conn = await pool.getConnection();
     await conn.query('UPDATE infra_diary_goals SET text=?, updated_at=NOW() WHERE id=?', [text, id]);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
@@ -2375,7 +2375,7 @@ app.post('/api/infra/activity/recompute', requireAuth, async (req, res) => {
     // Run recompute script (fast enough for manual refresh)
     const { execSync } = require('child_process');
     execSync('node scripts/recompute_activity.js', { cwd: '/opt/feego-admin', stdio: 'ignore', timeout: 60_000 });
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   }
@@ -2663,7 +2663,7 @@ app.post('/api/uploads/delete', requireAuth, async (req, res) => {
         conn.release();
       }
     } catch (_e) {}
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(404).json({ ok: false, error: 'not_found' });
   }
@@ -2823,7 +2823,7 @@ app.post('/api/kanban/project', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.query('INSERT INTO kb_projects (name, sort, description, logo_path) VALUES (?, 9999, \'\', NULL)', [name]);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
@@ -2930,7 +2930,7 @@ app.post('/api/kanban/project/update', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.query('UPDATE kb_projects SET name=?, description=? WHERE id=? AND archived=0', [name, description, id]);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
@@ -2996,7 +2996,7 @@ app.delete('/api/kanban/project', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.query('UPDATE kb_projects SET archived=1 WHERE id=?', [id]);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
@@ -3015,7 +3015,7 @@ app.delete('/api/kanban/project/permanent', requireAuth, async (req, res) => {
     await conn.query('DELETE FROM kb_sections WHERE project_id=?', [id]);
     await conn.query('DELETE FROM kb_projects WHERE id=?', [id]);
     await conn.commit();
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     try { if (conn) await conn.rollback(); } catch {}
     res.status(500).json({ ok: false });
@@ -3086,7 +3086,7 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
         [title, notes, project_id, board, status, insertSort, primarySectionId, sectionNameSerialized, due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : [])]
       );
     }
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
@@ -3119,7 +3119,7 @@ app.post('/api/kanban/move', requireAuth, async (req, res) => {
     if (sort !== undefined) { fields.push('sort=?'); params.push(sort); }
     params.push(id);
     await conn.query('UPDATE kb_cards SET ' + fields.join(', ') + ' WHERE id=?', params);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
@@ -3185,7 +3185,7 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
         [title, notes, project_id, primarySectionId, sectionNameSerialized, due_at, priority, labels_json, id]
       );
     }
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     console.error('kanban/card/update error', e);
     res.status(500).json({ ok: false, error: 'server_error' });
@@ -3201,7 +3201,7 @@ app.delete('/api/kanban/card', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.query('DELETE FROM kb_cards WHERE id=?', [id]);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
@@ -3235,7 +3235,7 @@ app.post('/api/kanban/sections', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.query('INSERT INTO kb_sections (project_id, name, color, icon, sort) VALUES (?,?,?,?,9999)', [project_id, name, color, icon]);
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     if (e && e.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ ok: false, error: 'duplicate_section_name' });
@@ -3258,7 +3258,7 @@ app.post('/api/kanban/sections/update', requireAuth, async (req, res) => {
     conn = await pool.getConnection();
     const result = await conn.query('UPDATE kb_sections SET name=?, color=?, icon=? WHERE id=? AND archived=0', [name, color, icon, id]);
     if (!result || !result.affectedRows) return res.status(404).json({ ok: false, error: 'section_not_found' });
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch (e) {
     if (e && e.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ ok: false, error: 'duplicate_section_name' });
@@ -3294,7 +3294,7 @@ app.post('/api/kanban/sections/delete', requireAuth, async (req, res) => {
         await conn.query('UPDATE kb_cards SET section_ids_json=? WHERE id=?', [JSON.stringify(next), Number(card.id)]);
       }
     }
-    res.json({ ok: true, mustChange: !!u.must_change_password });
+    res.json({ ok: true });
   } catch {
     res.status(500).json({ ok: false });
   } finally {
