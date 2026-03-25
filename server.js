@@ -1947,7 +1947,7 @@ app.get('/api/infra/diary/day-items', requireAuth, async (req, res) => {
 
     const items = await conn.query("SELECT slug, name, icon, sort_order FROM infra_diary_items WHERE status='active' ORDER BY sort_order ASC, name ASC");    // Aggregate activity segments for the day (exec/chat/manual). These are "activity" sources.
     const activitySegs = await conn.query(
-      "SELECT project_slug AS slug, MIN(start_at) AS start_at, MAX(end_at) AS end_at, SUM(minutes) AS minutes, GROUP_CONCAT(DISTINCT notes SEPARATOR ' | ') AS notes FROM infra_activity_segments WHERE day=STR_TO_DATE(?, '%Y-%m-%d') GROUP BY project_slug",
+      "SELECT project_slug AS slug, MIN(start_at) AS start_at, MAX(end_at) AS end_at, SUM(minutes) AS minutes, GROUP_CONCAT(DISTINCT notes SEPARATOR ' | ') AS notes FROM infra_activity_segments WHERE day=STR_TO_DATE(?, '%Y-%m-%d') AND source='manual' GROUP BY project_slug",
       [day]
     );
 
