@@ -125,7 +125,41 @@ function Layout() {
     }
   }, [])
 
-  if (loading) {
+  
+  React.useEffect(() => {
+    function send(kind, payload) {
+      try {
+        fetch('/api/infra/ui-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ kind, href: window.location.href, ua: navigator.userAgent, ...payload }),
+        }).catch(() => {})
+      } catch {}
+    }
+
+    const onErr = (e) => {
+      send('window.error', { message: String(e.message || ''), filename: e.filename, lineno: e.lineno, colno: e.colno })
+    }
+
+    const onRej = (e) => {
+      const reason = e && e.reason ? e.reason : null
+      send('unhandledrejection', { reason: reason ? String(reason) : '' })
+    }
+
+    window.addEventListener('error', onErr)
+    window.addEventListener('unhandledrejection', onRej)
+
+    // heartbeat log (useful to know the UI loaded)
+    send('ui.heartbeat', { at: new Date().toISOString() })
+
+    return () => {
+      window.removeEventListener('error', onErr)
+      window.removeEventListener('unhandledrejection', onRej)
+    }
+  }, [])
+
+if (loading) {
     return (
       <div className="min-h-screen grid place-items-center text-sm text-slate-400">
         Cargando...

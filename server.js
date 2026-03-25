@@ -29,6 +29,7 @@ function getDataRoot() {
 }
 
 const INFRA_ICONS_DIR = path.join(getDataRoot(), 'infra-icons');
+const UI_LOG_PATH = path.join(getDataRoot(), 'ui-errors.log');
 fs.mkdirSync(INFRA_ICONS_DIR, { recursive: true });
 
 // TEMP: large limit while migrating sites
@@ -1571,7 +1572,7 @@ app.post('/api/account/password', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/status', requireAuth, (req, res) => {
+ app.get('/api/status', requireAuth, (req, res) => {
   const total = os.totalmem();
   const free = os.freemem();
   const used = total - free;
@@ -1579,6 +1580,38 @@ app.get('/api/status', requireAuth, (req, res) => {
   const memStr = (used / 1024 / 1024 / 1024).toFixed(1) + 'Gi usados / ' + (total / 1024 / 1024 / 1024).toFixed(1) + 'Gi total (' + pct + '%)';
   const load = os.loadavg().map(x => x.toFixed(2)).join(', ');
   res.json({ hostname: os.hostname(), uptime: Math.round(os.uptime() / 60) + 'm', mem: memStr, load });
+});
+
+// UI debug logs (append-only)
+app.post('/api/infra/ui-log', requireAuth, (req, res) => {
+  try {
+    const payload = req.body || {};
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      user: req.session && req.session.username ? req.session.username : null,
+      ...payload
+    }) + '\n';
+    fs.appendFileSync(UI_LOG_PATH, line);
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.get('/api/infra/ui-log', requireAuth, (req, res) => {
+  try {
+    const maxBytes = 200000;
+    let data = '';
+    try {
+      data = fs.readFileSync(UI_LOG_PATH, 'utf8');
+    } catch {
+      data = '';
+    }
+    if (data.length > maxBytes) data = data.slice(data.length - maxBytes);
+    res.json({ ok: true, text: data });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
 });
 
 // Deploy verification (public, no auth)
