@@ -1898,7 +1898,7 @@ app.get('/api/infra/diary/summary', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    const rows = await conn.query("SELECT DATE_FORMAT(day,'%Y-%m-%d') AS day, LENGTH(summary_md) AS summary_len, updated_at FROM infra_diary_daily ORDER BY day ASC");
+    const rows = await conn.query("SELECT DATE_FORMAT(day,'%Y-%m-%d') AS day, CHAR_LENGTH(TRIM(summary_md)) AS summary_len, updated_at FROM infra_diary_daily ORDER BY day ASC");
     const days = rows.map((r) => ({
       day: r.day,
       hasSummary: Number(r.summary_len || 0) > 0,
