@@ -69,11 +69,13 @@ function recentLabelBogota(dayIso) {
   }
 }
 function extractGoals(md) {
-  const txt = String(md || '').split('\r\n').join('\n')
+  const txt = String(md || '').split('\r\n').join('\n').trim()
+  if (!txt) return ''
+
   const m = txt.match(/(^|\n)##\s+Metas\b([\s\S]*?)(?=\n##\s+|$)/m)
-  if (!m) return ''
-  const body = String(m[2] || '').trim()
+  const body = m ? String(m[2] || '').trim() : txt
   if (!body) return ''
+
   return body
     .split('\n')
     .map((l) => String(l || '').trim())
@@ -264,11 +266,16 @@ export default function DiaryPage() {
       <Modal open={dayOpen} onClose={() => setDayOpen(false)} title={dayEntry ? prettyDayTitleBogota(dayEntry.day) : 'Diario'}>
         {!dayEntry ? null : (
           <div className="space-y-4">
+            <div data-testid="day-title" className="text-lg font-black text-slate-200">{dayEntry?.day ? prettyDayTitleBogota(dayEntry.day) : ""}</div>
             <Card className="p-4">
               <div className="text-xs text-slate-400">Metas</div>
               {(() => {
                 const goalsText = extractGoals(dayEntry?.summary_md)
-                if (!goalsText) return <div className="mt-2 text-sm text-slate-400">—</div>
+                if (!goalsText) return (
+                  <div className="mt-2 text-sm text-slate-400">—
+                    {dayEntry?.summary_md ? <div className="mt-2 text-xs text-slate-500" data-testid="metas_hint">(No se detectó bloque de metas en el texto)</div> : null}
+                  </div>
+                )
                 return (
                   <pre className="mt-3 text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{goalsText}</pre>
                 )
