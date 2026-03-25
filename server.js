@@ -1945,17 +1945,23 @@ app.get('/api/infra/diary/day-items', requireAuth, async (req, res) => {
 
     conn = await pool.getConnection();
 
-    const items = await conn.query("SELECT slug, name, icon, sort_order FROM infra_diary_items WHERE status='active' ORDER BY sort_order ASC, name ASC");
-
-    // Aggregate activity segments for the day (manual + exec + chat). UTC timestamps stored.
-    const segs = await conn.query(
-      "SELECT project_slug, MIN(start_at) AS start_at, MAX(end_at) AS end_at, SUM(minutes) AS minutes, GROUP_CONCAT(DISTINCT notes SEPARATOR ' | ') AS notes FROM infra_activity_segments WHERE day=STR_TO_DATE(?, '%Y-%m-%d') GROUP BY project_slug",
+    const items = await conn.query("SELECT slug, name, icon, sort_order FROM infra_diary_items WHERE status='active' ORDER BY sort_order ASC, name ASC");    // Aggregate activity segments for the day (exec/chat/manual). These are "activity" sources.
+    const activitySegs = await conn.query(
+      "SELECT project_slug AS slug, MIN(start_at) AS start_at, MAX(end_at) AS end_at, SUM(minutes) AS minutes, GROUP_CONCAT(DISTINCT notes SEPARATOR ' | ') AS notes FROM infra_activity_segments WHERE day=STR_TO_DATE(?, '%Y-%m-%d') GROUP BY project_slug",
       [day]
     );
 
+    // Diary-only segments (can include non-project items). Does NOT affect Activity dashboard.
+    const diarySegs = await conn.query(
+      "SELECT item_slug AS slug, MIN(start_at) AS start_at, MAX(end_at) AS end_at, SUM(minutes) AS minutes, GROUP_CONCAT(DISTINCT notes SEPARATOR ' | ') AS notes FROM infra_diary_segments WHERE day=STR_TO_DATE(?, '%Y-%m-%d') GROUP BY item_slug",
+      [day]
+    );
+
+    const segs = [...(activitySegs || []), ...(diarySegs || [])];
+
     const bySlug = new Map();
     for (const r of (segs || [])) {
-      bySlug.set(String(r.project_slug || ''), r);
+      bySlug.set(String(r.slug || ''), r);
     }
 
     const rows = (items || []).map((it) => {
