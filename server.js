@@ -2058,13 +2058,29 @@ app.get('/api/infra/diary/day', requireAuth, async (req, res) => {
   try {
     const day = String(req.query.day || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+
     conn = await pool.getConnection();
     const rows = await conn.query(
       'SELECT DATE_FORMAT(day,\'%Y-%m-%d\') AS day, summary_md, raw_transcript, source, created_by, created_at, updated_at FROM infra_diary_daily WHERE day=? LIMIT 1',
       [day],
     );
-    if (!rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
-    res.json({ ok: true, entry: rows[0] });
+    const entry = rows && rows.length
+      ? rows[0]
+      : { day, summary_md: '', raw_transcript: '', source: null, created_by: null, created_at: null, updated_at: null };
+
+    // Server-side debug line: helps verify what the API is returning.
+    try {
+      const debugLine = JSON.stringify({
+        ts: new Date().toISOString(),
+        kind: 'diary.day',
+        day,
+        summary_len: String(entry.summary_md || '').length,
+        ua: String(req.headers['user-agent'] || '').slice(0, 180),
+      }) + '\n';
+      fs.appendFileSync(UI_LOG_PATH, debugLine);
+    } catch {}
+
+    res.json({ ok: true, entry });
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
