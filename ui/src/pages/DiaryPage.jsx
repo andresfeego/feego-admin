@@ -16,7 +16,7 @@ function Modal({ open, title, onClose, children }) {
       <div className="fixed z-50 inset-0 grid place-items-center p-4">
         <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-950/95 backdrop-blur-xl">
           <div className="flex items-center justify-between gap-4 p-4 border-b border-white/10">
-            <div className="font-bold text-slate-100">{title}</div>
+            <div className="text-xl font-bold text-slate-100">{title}</div>
             <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={onClose}>Cerrar</button>
           </div>
           <div className="p-4">{children}</div>
@@ -266,16 +266,13 @@ export default function DiaryPage() {
       <Modal open={dayOpen} onClose={() => setDayOpen(false)} title={dayEntry ? prettyDayTitleBogota(dayEntry.day) : 'Diario'}>
         {!dayEntry ? null : (
           <div className="space-y-4">
-            <div data-testid="day-title" className="text-lg font-black text-slate-200">{dayEntry?.day ? prettyDayTitleBogota(dayEntry.day) : ""}</div>
             <Card className="p-4">
               <div className="text-xs text-slate-400">Metas</div>
               {(() => {
-                const goalsText = extractGoals(dayEntry?.summary_md)
-                if (!goalsText) return (
-                  <div className="mt-2 text-sm text-slate-400">—</div>
-                )
+                const raw = String(dayEntry?.summary_md || '').trim()
+                if (!raw) return <div className="mt-2 text-sm text-slate-400">—</div>
                 return (
-                  <pre className="mt-3 text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{goalsText}</pre>
+                  <pre className="mt-3 text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{raw}</pre>
                 )
               })()}
             </Card>
