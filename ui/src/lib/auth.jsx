@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
     setLoading(true)
     const r = await api('/api/session')
     if (r.ok && r.data?.authenticated) {
-      setUser({ username: r.data.username })
+      setUser({ username: r.data.username, mustChange: !!r.data.mustChange })
     } else {
       setUser(null)
     }
