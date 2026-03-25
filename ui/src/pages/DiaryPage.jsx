@@ -232,23 +232,22 @@ export default function DiaryPage() {
                   const rr = await api('/api/infra/diary/day-items?day=' + encodeURIComponent(day))
                   if (rr.ok) setDayRows(rr.data.rows || [])
                   else setDayRows([])
-                  setDayGoals([])
                 } finally {
                   setDayRowsLoading(false)
                 }
+
+                await loadDayGoalsFor(day)
                 if (r.ok) {
                   setDayEntry(r.data.entry)
                   setDayOpen(true)
                 } else {
                   setDayEntry({ day, summary_md: '', updated_at: null })
                   setDayRows([])
-                  setDayGoals([])
                   setDayOpen(true)
                 }
               } catch {
                 setDayEntry({ day, summary_md: '', updated_at: null })
                 setDayRows([])
-                  setDayGoals([])
                 setDayOpen(true)
               }
             }}
