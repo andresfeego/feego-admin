@@ -48,6 +48,36 @@ function fmtBogota(iso) {
   }
 }
 
+function recentLabelBogota(dayIso) {
+  try {
+    const tz = 'America/Bogota'
+    const parts = String(dayIso || '').split('-')
+    const Y = Number(parts[0] || 0)
+    const M = Number(parts[1] || 1)
+    const D = Number(parts[2] || 1)
+    const dt = new Date(Date.UTC(Y, M - 1, D, 12, 0, 0))
+    const wdRaw = new Intl.DateTimeFormat('es-CO', { timeZone: tz, weekday: 'short' }).format(dt)
+    const key = wdRaw.toLowerCase().replace('.', '')
+    const map = { lun: 'Lun', mar: 'Mar', mié: 'Mie', mie: 'Mie', jue: 'Jue', vie: 'Vie', sáb: 'Sab', sab: 'Sab', dom: 'Dom' }
+    const W = map[key] || (wdRaw.charAt(0).toUpperCase() + wdRaw.slice(1, 3).toLowerCase())
+    const dd = String(D).padStart(2, '0')
+    const mm = String(M).padStart(2, '0')
+    const yyyy = String(Y).padStart(4, '0')
+    return W + ' ' + dd + '-' + mm + '-' + yyyy
+  } catch {
+    return String(dayIso || '')
+  }
+}
+function extractGoals(md) {
+  const txt = String(md || '')
+  const m = txt.match(/(^|\n)##\s+Metas\b[\s\S]*?(?=\n##\s+|$)/m)
+  if (!m) return []
+  return m[0]
+    .split(/\n/)
+    .map((l) => String(l || '').trim())
+    .filter((l) => /^- \[[ xX]\]/.test(l))
+    .map((l) => l.replace(/^- \[[ xX]\]\s*/, ''))
+}
 function monthLabelBogota(date) {
   try {
     return new Intl.DateTimeFormat('es-CO', { timeZone: TZ_BOGOTA, month: 'long', year: 'numeric' }).format(date)
@@ -201,8 +231,7 @@ export default function DiaryPage() {
               {(recent || []).map((e) => (
                 <details key={e.day} className="group rounded-xl border border-white/10 bg-white/5">
                   <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
-                    <div className="font-mono text-sm text-slate-200">{e.day}</div>
-                    <div className="text-xs text-slate-400">{e.updated_at ? fmtBogota(e.updated_at) : ''}</div>
+                    <div className="font-mono text-sm text-slate-200">{recentLabelBogota(e.day)}</div>
                   </summary>
                   <div className="px-4 pb-4">
                     <pre className="text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(e.summary_md || '—').trim() || '—'}</pre>
@@ -222,6 +251,24 @@ export default function DiaryPage() {
               <div className="mt-1 text-sm text-slate-200 font-mono">{dayEntry.updated_at ? fmtBogota(dayEntry.updated_at) : '—'}</div>
             </Card>
             <Card className="p-4">
+              <div className="text-xs text-slate-400">Metas</div>
+              {(() => {
+                const goals = extractGoals(dayEntry?.summary_md)
+                if (!goals || goals.length === 0) return <div className="mt-2 text-sm text-slate-400">—</div>
+                return (
+                  <div className="mt-3 space-y-2">
+                    {goals.map((g, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm">
+                        <div className="w-5 h-5 rounded border border-white/10 bg-white/5" />
+                        <div className="text-slate-200">{g}</div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </Card>
+
+<Card className="p-4">
               <div className="flex items-center justify-between">
                 <div className="text-xs text-slate-400">Ítems (visual)</div>
                 <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayRowsFor(dayEntry.day) : null}>
