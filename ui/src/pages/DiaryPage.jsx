@@ -272,9 +272,7 @@ export default function DiaryPage() {
               {(() => {
                 const goalsText = extractGoals(dayEntry?.summary_md)
                 if (!goalsText) return (
-                  <div className="mt-2 text-sm text-slate-400">—
-                    {dayEntry?.summary_md ? <div className="mt-2 text-xs text-slate-500" data-testid="metas_hint">(No se detectó bloque de metas en el texto)</div> : null}
-                  </div>
+                  <div className="mt-2 text-sm text-slate-400">—</div>
                 )
                 return (
                   <pre className="mt-3 text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{goalsText}</pre>
