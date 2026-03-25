@@ -2037,6 +2037,12 @@ app.post('/api/infra/diary/goals/toggle', requireAuth, async (req, res) => {
       [status, done ? 1 : 0, id],
     );
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
 
 app.post('/api/infra/diary/goals/update', requireAuth, async (req, res) => {
   let conn;
@@ -2048,18 +2054,8 @@ app.post('/api/infra/diary/goals/update', requireAuth, async (req, res) => {
     if (text.length > 300) return res.status(400).json({ ok: false, error: 'too_long' });
 
     conn = await pool.getConnection();
-    await conn.query(
-      'UPDATE infra_diary_goals SET text=?, updated_at=NOW() WHERE id=?',
-      [text, id],
-    );
+    await conn.query('UPDATE infra_diary_goals SET text=?, updated_at=NOW() WHERE id=?', [text, id]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false });
-  } finally {
-    if (conn) conn.release();
-  }
-});
-
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
