@@ -2003,6 +2003,47 @@ app.get('/api/infra/diary/items', requireAuth, async (req, res) => {
   }
 });
 
+
+// Diary goals (structured)
+app.get('/api/infra/diary/goals', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const day = String(req.query.day || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+    conn = await pool.getConnection();
+    const rows = await conn.query(
+      "SELECT id, DATE_FORMAT(day,'%Y-%m-%d') AS day, text, status, sort_order, checked_at FROM infra_diary_goals WHERE day=STR_TO_DATE(?, '%Y-%m-%d') ORDER BY sort_order ASC, id ASC",
+      [day],
+    );
+    res.json({ ok: true, goals: rows || [] });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.post('/api/infra/diary/goals/toggle', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const id = Number(req.body && req.body.id);
+    const done = !!(req.body && req.body.done);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'bad_id' });
+
+    conn = await pool.getConnection();
+    const status = done ? 'done' : 'todo';
+    await conn.query(
+      "UPDATE infra_diary_goals SET status=?, checked_at=IF(?, NOW(), NULL), updated_at=NOW() WHERE id=?",
+      [status, done ? 1 : 0, id],
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 app.get('/api/infra/diary/day-items', requireAuth, async (req, res) => {
   let conn;
   try {

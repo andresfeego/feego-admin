@@ -114,6 +114,8 @@ export default function DiaryPage() {
   const [dayOpen, setDayOpen] = React.useState(false)
   const [dayEntry, setDayEntry] = React.useState(null)
   const [dayRows, setDayRows] = React.useState([])
+  const [dayGoals, setDayGoals] = React.useState([])
+  const [dayGoalsLoading, setDayGoalsLoading] = React.useState(false)
   const [dayRowsLoading, setDayRowsLoading] = React.useState(false)
 
   const [recentExpanded, setRecentExpanded] = React.useState(false)
@@ -133,6 +135,30 @@ export default function DiaryPage() {
   async function loadDayRowsFor(day) {
     await loadDayRowsFor(day)
   }
+
+  async function loadDayGoalsFor(day) {
+    try {
+      setDayGoalsLoading(true)
+      const rr = await api('/api/infra/diary/goals?day=' + encodeURIComponent(day))
+      if (rr.ok) setDayGoals(rr.data.goals || [])
+      else setDayGoals([])
+    } finally {
+      setDayGoalsLoading(false)
+    }
+  }
+
+  async function toggleGoal(id, done) {
+    try {
+      await api('/api/infra/diary/goals/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, done }),
+      })
+    } finally {
+      if (dayEntry?.day) await loadDayGoalsFor(dayEntry.day)
+    }
+  }
+
 
 
   React.useEffect(() => {
@@ -206,6 +232,7 @@ export default function DiaryPage() {
                   const rr = await api('/api/infra/diary/day-items?day=' + encodeURIComponent(day))
                   if (rr.ok) setDayRows(rr.data.rows || [])
                   else setDayRows([])
+                  setDayGoals([])
                 } finally {
                   setDayRowsLoading(false)
                 }
@@ -215,11 +242,13 @@ export default function DiaryPage() {
                 } else {
                   setDayEntry({ day, summary_md: '', updated_at: null })
                   setDayRows([])
+                  setDayGoals([])
                   setDayOpen(true)
                 }
               } catch {
                 setDayEntry({ day, summary_md: '', updated_at: null })
                 setDayRows([])
+                  setDayGoals([])
                 setDayOpen(true)
               }
             }}
@@ -267,14 +296,33 @@ export default function DiaryPage() {
         {!dayEntry ? null : (
           <div className="space-y-4">
             <Card className="p-4">
-              <div className="text-xs text-slate-400">Metas</div>
-              {(() => {
-                const raw = String(dayEntry?.summary_md || '').trim()
-                if (!raw) return <div className="mt-2 text-sm text-slate-400">—</div>
-                return (
-                  <pre className="mt-3 text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{raw}</pre>
-                )
-              })()}
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-slate-400">Metas</div>
+                <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayGoalsFor(dayEntry.day) : null}>
+                  Refrescar
+                </button>
+              </div>
+
+              {dayGoalsLoading ? <div className="mt-2 text-sm text-slate-400">Cargando…</div> : null}
+              {!dayGoalsLoading && (!dayGoals || dayGoals.length === 0) ? <div className="mt-2 text-sm text-slate-400">—</div> : null}
+
+              {dayGoals && dayGoals.length ? (
+                <div className="mt-3 space-y-2">
+                  {dayGoals.map((g) => (
+                    <label key={g.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-black/20">
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 accent-emerald-500"
+                        checked={g.status === 'done'}
+                        onChange={(e) => toggleGoal(g.id, e.target.checked)}
+                      />
+                      <div className={"text-sm " + (g.status === 'done' ? 'line-through text-slate-400' : 'text-slate-200')}>
+                        {g.text}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
             </Card>
 
 <Card className="p-4">
