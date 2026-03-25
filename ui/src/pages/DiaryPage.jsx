@@ -78,8 +78,8 @@ function extractGoals(md) {
   const items = block
     .split(/\n/)
     .map((l) => String(l || '').trim())
-    .filter((l) => /^- \[\[[ xX]\]\]/.test(l))
-    .map((l) => l.replace(/^- \[\[[ xX]\]\]\s*/, ''))
+    .filter((l) => /^- \[[ xX]\]/.test(l))
+    .map((l) => l.replace(/^- \[[ xX]\]\s*/, ''))
 
   return items
 }
