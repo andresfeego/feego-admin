@@ -69,19 +69,17 @@ function recentLabelBogota(dayIso) {
   }
 }
 function extractGoals(md) {
-  const txt = String(md || '').replace(/\r\n/g, '\n')
-
-  // Prefer the explicit block under "## Metas"
-  const m = txt.match(/(^|\n)##\s+Metas\b[\s\S]*?(?=\n##\s+|$)/m)
-  const block = m ? m[0] : txt
-
-  const items = block
-    .split(/\n/)
+  const txt = String(md || '').split('\r\n').join('\n')
+  const m = txt.match(/(^|\n)##\s+Metas\b([\s\S]*?)(?=\n##\s+|$)/m)
+  if (!m) return ''
+  const body = String(m[2] || '').trim()
+  if (!body) return ''
+  return body
+    .split('\n')
     .map((l) => String(l || '').trim())
-    .filter((l) => /^- \[[ xX]\]/.test(l))
-    .map((l) => l.replace(/^- \[[ xX]\]\s*/, ''))
-
-  return items
+    .filter(Boolean)
+    .map((l) => l.replace(/^[-*]\s*/, '').replace(/^\[[ xX]\]\s*/, ''))
+    .join('\n')
 }
 function prettyDayTitleBogota(dayIso) {
   try {
@@ -268,19 +266,11 @@ export default function DiaryPage() {
           <div className="space-y-4">
             <Card className="p-4">
               <div className="text-xs text-slate-400">Metas</div>
-              <div className="mt-1 text-[11px] text-slate-500 font-mono">day: {dayEntry?.day} | md_len: {(dayEntry?.summary_md || "").length}</div>
               {(() => {
-                const goals = extractGoals(dayEntry?.summary_md)
-                if (!goals || goals.length === 0) return <div className="mt-2 text-sm text-slate-400">—</div>
+                const goalsText = extractGoals(dayEntry?.summary_md)
+                if (!goalsText) return <div className="mt-2 text-sm text-slate-400">—</div>
                 return (
-                  <div className="mt-3 space-y-2">
-                    {goals.map((g, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm">
-                        <div className="w-5 h-5 rounded border border-white/10 bg-white/5" />
-                        <div className="text-slate-200">{g}</div>
-                      </div>
-                    ))}
-                  </div>
+                  <pre className="mt-3 text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{goalsText}</pre>
                 )
               })()}
             </Card>
