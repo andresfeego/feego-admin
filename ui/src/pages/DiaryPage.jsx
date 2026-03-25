@@ -115,6 +115,8 @@ export default function DiaryPage() {
   const [dayEntry, setDayEntry] = React.useState(null)
   const [dayRows, setDayRows] = React.useState([])
   const [dayGoals, setDayGoals] = React.useState([])
+  const [editingGoalId, setEditingGoalId] = React.useState(null)
+  const [editingGoalText, setEditingGoalText] = React.useState('')
   const [dayGoalsLoading, setDayGoalsLoading] = React.useState(false)
   const [dayRowsLoading, setDayRowsLoading] = React.useState(false)
 
@@ -158,6 +160,18 @@ export default function DiaryPage() {
       if (dayEntry?.day) await loadDayGoalsFor(dayEntry.day)
     }
   }
+
+  async function updateGoalText(id, text) {
+    const t = String(text || '').trim()
+    if (!t) return
+    await api('/api/infra/diary/goals/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, text: t }),
+    })
+    if (dayEntry?.day) await loadDayGoalsFor(dayEntry.day)
+  }
+
 
 
 
@@ -308,17 +322,55 @@ export default function DiaryPage() {
               {dayGoals && dayGoals.length ? (
                 <div className="mt-3 space-y-2">
                   {dayGoals.map((g) => (
-                    <label key={g.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-black/20">
+                    <div key={g.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-black/20">
                       <input
                         type="checkbox"
                         className="h-5 w-5 accent-emerald-500"
                         checked={g.status === 'done'}
                         onChange={(e) => toggleGoal(g.id, e.target.checked)}
                       />
-                      <div className={"text-sm " + (g.status === 'done' ? 'line-through text-slate-400' : 'text-slate-200')}>
-                        {g.text}
-                      </div>
-                    </label>
+
+                      {editingGoalId === g.id ? (
+                        <input
+                          className="flex-1 px-3 py-2 rounded-xl border border-white/10 bg-black/30 text-slate-100 text-sm"
+                          value={editingGoalText}
+                          autoFocus
+                          onChange={(e) => setEditingGoalText(e.target.value)}
+                          onBlur={async () => {
+                            const next = editingGoalText
+                            setEditingGoalId(null)
+                            setEditingGoalText('')
+                            await updateGoalText(g.id, next)
+                          }}
+                          onKeyDown={async (e) => {
+                            if (e.key === 'Escape') {
+                              setEditingGoalId(null)
+                              setEditingGoalText('')
+                            }
+                            if (e.key === 'Enter') {
+                              const next = editingGoalText
+                              setEditingGoalId(null)
+                              setEditingGoalText('')
+                              await updateGoalText(g.id, next)
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className={"flex-1 text-sm " + (g.status === 'done' ? 'line-through text-slate-400' : 'text-slate-200')}>{g.text}</div>
+                      )}
+
+                      <button
+                        type="button"
+                        className="shrink-0 w-9 h-9 grid place-items-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10"
+                        title="Editar"
+                        onClick={() => {
+                          setEditingGoalId(g.id)
+                          setEditingGoalText(g.text || '')
+                        }}
+                      >
+                        ✎
+                      </button>
+                    </div>
                   ))}
                 </div>
               ) : null}

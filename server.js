@@ -2037,6 +2037,29 @@ app.post('/api/infra/diary/goals/toggle', requireAuth, async (req, res) => {
       [status, done ? 1 : 0, id],
     );
     res.json({ ok: true });
+
+app.post('/api/infra/diary/goals/update', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const id = Number(req.body && req.body.id);
+    const text = String((req.body && req.body.text) || '').trim();
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'bad_id' });
+    if (!text) return res.status(400).json({ ok: false, error: 'empty_text' });
+    if (text.length > 300) return res.status(400).json({ ok: false, error: 'too_long' });
+
+    conn = await pool.getConnection();
+    await conn.query(
+      'UPDATE infra_diary_goals SET text=?, updated_at=NOW() WHERE id=?',
+      [text, id],
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
   } catch (e) {
     res.status(500).json({ ok: false });
   } finally {
