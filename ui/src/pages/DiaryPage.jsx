@@ -69,14 +69,19 @@ function recentLabelBogota(dayIso) {
   }
 }
 function extractGoals(md) {
-  const txt = String(md || '')
+  const txt = String(md || '').replace(/\r\n/g, '\n')
+
+  // Prefer the explicit block under "## Metas"
   const m = txt.match(/(^|\n)##\s+Metas\b[\s\S]*?(?=\n##\s+|$)/m)
-  if (!m) return []
-  return m[0]
+  const block = m ? m[0] : txt
+
+  const items = block
     .split(/\n/)
     .map((l) => String(l || '').trim())
-    .filter((l) => /^- \[[ xX]\]/.test(l))
-    .map((l) => l.replace(/^- \[[ xX]\]\s*/, ''))
+    .filter((l) => /^- \[\[[ xX]\]\]/.test(l))
+    .map((l) => l.replace(/^- \[\[[ xX]\]\]\s*/, ''))
+
+  return items
 }
 function prettyDayTitleBogota(dayIso) {
   try {
@@ -263,6 +268,7 @@ export default function DiaryPage() {
           <div className="space-y-4">
             <Card className="p-4">
               <div className="text-xs text-slate-400">Metas</div>
+              <div className="mt-1 text-[11px] text-slate-500 font-mono">day: {dayEntry?.day} | md_len: {(dayEntry?.summary_md || "").length}</div>
               {(() => {
                 const goals = extractGoals(dayEntry?.summary_md)
                 if (!goals || goals.length === 0) return <div className="mt-2 text-sm text-slate-400">—</div>
