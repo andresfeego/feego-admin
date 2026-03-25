@@ -78,6 +78,21 @@ function extractGoals(md) {
     .filter((l) => /^- \[[ xX]\]/.test(l))
     .map((l) => l.replace(/^- \[[ xX]\]\s*/, ''))
 }
+function prettyDayTitleBogota(dayIso) {
+  try {
+    const tz='America/Bogota'
+    const parts=String(dayIso||'').split('-')
+    const Y=Number(parts[0]||0)
+    const M=Number(parts[1]||1)
+    const D=Number(parts[2]||1)
+    const dt=new Date(Date.UTC(Y, M-1, D, 12, 0, 0))
+    const month = new Intl.DateTimeFormat('es-CO', { timeZone: tz, month: 'long' }).format(dt)
+    const m = month ? (month.charAt(0).toUpperCase() + month.slice(1)) : ''
+    return String(D) + ' ' + m
+  } catch {
+    return String(dayIso || '')
+  }
+}
 function monthLabelBogota(date) {
   try {
     return new Intl.DateTimeFormat('es-CO', { timeZone: TZ_BOGOTA, month: 'long', year: 'numeric' }).format(date)
@@ -243,13 +258,9 @@ export default function DiaryPage() {
         </div>
       </Card>
 
-      <Modal open={dayOpen} onClose={() => setDayOpen(false)} title={dayEntry ? ('Diario ' + dayEntry.day) : 'Diario'}>
+      <Modal open={dayOpen} onClose={() => setDayOpen(false)} title={dayEntry ? prettyDayTitleBogota(dayEntry.day) : 'Diario'}>
         {!dayEntry ? null : (
           <div className="space-y-4">
-            <Card className="p-4">
-              <div className="text-xs text-slate-400">Actualizado</div>
-              <div className="mt-1 text-sm text-slate-200 font-mono">{dayEntry.updated_at ? fmtBogota(dayEntry.updated_at) : '—'}</div>
-            </Card>
             <Card className="p-4">
               <div className="text-xs text-slate-400">Metas</div>
               {(() => {
