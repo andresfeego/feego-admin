@@ -154,7 +154,7 @@ function Layout() {
         <main className="flex-1 p-4 md:p-6 lg:p-8 2xl:p-12 max-w-full overflow-x-hidden">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/site" element={<RequireAuth><MarketingPage /></RequireAuth>} />
             <Route path="/quotes" element={<RequireAuth><QuotesPage /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />

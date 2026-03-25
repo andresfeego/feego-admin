@@ -14,5 +14,9 @@ export default function RequireAuth({ children }) {
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />
   }
 
+  if (user.mustChange && loc.pathname !== '/login') {
+    return <Navigate to="/login" replace />
+  }
+
   return children
 }
