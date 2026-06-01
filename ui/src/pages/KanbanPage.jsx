@@ -757,12 +757,52 @@ export default function KanbanPage() {
     ), { duration: 12000 })
   }
 
-  const iconCatalog = [
+  const iconSeeds = [
+    // base
     'Tag','Briefcase','Wrench','Globe','ShoppingCart','Home','Users','User','Rocket','Megaphone',
     'Camera','Video','FileText','Folder','Book','GraduationCap','Heart','Star','Gift','Bell',
     'Calendar','Clock','Phone','Mail','MapPin','Bolt','Flame','Lightbulb','Shield','CreditCard',
-    'Hammer','Building2','Truck','Store','Package','DollarSign','PiggyBank','ChartLine','Target','CheckCircle2'
+    'Hammer','Building2','Truck','Store','Package','DollarSign','PiggyBank','ChartLine','Target','CheckCircle2',
+    // tech/web/mobile/infra
+    'Laptop','Monitor','MonitorSmartphone','Smartphone','Tablet','Server','Database','Cpu','Code2','Terminal',
+    'Binary','Network','Wifi','Bluetooth','Cloud','CloudCog','CloudUpload','CloudDownload','HardDrive','HardDriveUpload',
+    'HardDriveDownload','Usb','Cable','Router','Webhook','AppWindow','PanelsTopLeft','Bug','BugPlay','ShieldCheck',
+    'ShieldAlert','Lock','KeyRound','Fingerprint','QrCode','ScanLine','FileCode2','GitBranch','GitCommitHorizontal','GitPullRequest',
+    'Container','Boxes','PackageSearch','Braces','Component','Workflow','Waypoints','Activity','Gauge','BarChart3',
+    'LineChart','PieChart','Search','Sparkles','Zap','BrainCircuit','Bot','Brain','Microscope','TestTube2',
+    // personal/home
+    'House','HousePlus','Bed','Bath','Sofa','CookingPot','UtensilsCrossed','Refrigerator','WashingMachine','Lamp',
+    'LightbulbOff','ShowerHead','Toilet','Archive','ArchiveRestore','ClipboardList','ListTodo','NotebookPen','StickyNote','BookOpen',
+    'Broom','BrushCleaning','WandSparkles','SprayCan','PackageOpen','Warehouse','DoorOpen','DoorClosed','PanelsLeftBottom','GalleryVerticalEnd',
+    'Trees','Flower2','Sun','Moon','CloudSun','Umbrella','Car','Bike','Bus','MapPinned'
   ]
+
+  const iconCatalog = React.useMemo(() => {
+    const all = Object.keys(Icons || {})
+    const techMatchers = [/Phone|Smart|Tablet|Laptop|Monitor|Screen|Code|Terminal|Server|Database|Cloud|Git|Cpu|Wifi|Bluetooth|Network|Webhook|App|Window|Shield|Lock|Key|Bug|Bot|Chart|Gauge|Activity|Sparkles|Zap/i]
+    const homeMatchers = [/Home|House|Bed|Bath|Sofa|Cook|Utensil|Refrigerator|Washing|Lamp|Shower|Toilet|Broom|Brush|Spray|Door|Garage|Warehouse|Archive|Clipboard|List|Note|Book|Sun|Moon|Tree|Flower|Car|Bike|Bus/i]
+    const scored = all
+      .filter((name) => /^[A-Z]/.test(name))
+      .map((name) => ({
+        name,
+        score: (techMatchers.some((r) => r.test(name)) ? 2 : 0) + (homeMatchers.some((r) => r.test(name)) ? 2 : 0),
+      }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .map((x) => x.name)
+
+    const merged = [...iconSeeds, ...scored]
+    const uniq = []
+    const seen = new Set()
+    for (const n of merged) {
+      if (!seen.has(n) && Icons[n]) {
+        seen.add(n)
+        uniq.push(n)
+      }
+      if (uniq.length >= 150) break
+    }
+    return uniq
+  }, [])
 
   function IconByName({ name, className, style }) {
     const C = Icons[name] || Icons.Tag
