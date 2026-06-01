@@ -2063,6 +2063,35 @@ app.post('/api/infra/diary/goals/update', requireAuth, async (req, res) => {
   }
 });
 
+
+
+app.post('/api/infra/diary/goals/create', requireAuth, async (req, res) => {
+  let conn;
+  try {
+    const day = String((req.body && req.body.day) || '').trim();
+    const text = String((req.body && req.body.text) || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ ok: false, error: 'bad_day' });
+    if (!text) return res.status(400).json({ ok: false, error: 'empty_text' });
+    if (text.length > 300) return res.status(400).json({ ok: false, error: 'too_long' });
+
+    conn = await pool.getConnection();
+    const rr = await conn.query(
+      "SELECT COALESCE(MAX(sort_order), 0) AS mx FROM infra_diary_goals WHERE day=STR_TO_DATE(?, '%Y-%m-%d')",
+      [day],
+    );
+    const nextOrder = Number((rr && rr[0] && rr[0].mx) || 0) + 1;
+
+    const ins = await conn.query(
+      "INSERT INTO infra_diary_goals(day, text, status, sort_order) VALUES (STR_TO_DATE(?, '%Y-%m-%d'), ?, 'todo', ?)",
+      [day, text, nextOrder],
+    );
+    res.json({ ok: true, id: Number(ins && ins.insertId) || null });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  } finally {
+    if (conn) conn.release();
+  }
+});
 app.get('/api/infra/diary/day-items', requireAuth, async (req, res) => {
   let conn;
   try {
@@ -2621,6 +2650,7 @@ app.get('/api/uploads/list', requireAuth, async (req, res) => {
     res.status(500).json({ ok: false });
   }
 });
+
 
 app.get('/api/uploads/download', requireAuth, async (req, res) => {
   const name = String(req.query.name || '');

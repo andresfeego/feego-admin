@@ -119,6 +119,8 @@ export default function DiaryPage() {
   const [editingGoalText, setEditingGoalText] = React.useState('')
   const [dayGoalsLoading, setDayGoalsLoading] = React.useState(false)
   const [dayRowsLoading, setDayRowsLoading] = React.useState(false)
+  const [newGoalText, setNewGoalText] = React.useState('')
+  const [creatingGoal, setCreatingGoal] = React.useState(false)
 
   const [recentExpanded, setRecentExpanded] = React.useState(false)
   const [recent, setRecent] = React.useState([])
@@ -173,6 +175,22 @@ export default function DiaryPage() {
   }
 
 
+  async function createGoalForDay(day, text) {
+    const t = String(text || '').trim()
+    if (!day || !t) return
+    try {
+      setCreatingGoal(true)
+      await api('/api/infra/diary/goals/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ day, text: t }),
+      })
+      setNewGoalText('')
+    } finally {
+      setCreatingGoal(false)
+      if (dayEntry?.day) await loadDayGoalsFor(dayEntry.day)
+    }
+  }
 
 
   React.useEffect(() => {
@@ -309,11 +327,31 @@ export default function DiaryPage() {
         {!dayEntry ? null : (
           <div className="space-y-4">
             <Card className="p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-slate-400">Metas</div>
-                <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayGoalsFor(dayEntry.day) : null}>
-                  Refrescar
-                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-slate-100 text-xs min-w-[220px]"
+                    placeholder="Agregar meta manual"
+                    value={newGoalText}
+                    onChange={(e) => setNewGoalText(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter') {
+                        await createGoalForDay(dayEntry?.day, newGoalText)
+                      }
+                    }}
+                  />
+                  <button
+                    className="px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-xs"
+                    onClick={async () => await createGoalForDay(dayEntry?.day, newGoalText)}
+                    disabled={creatingGoal}
+                  >
+                    {creatingGoal ? 'Guardando…' : '+ Agregar meta'}
+                  </button>
+                  <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayGoalsFor(dayEntry.day) : null}>
+                    Refrescar
+                  </button>
+                </div>
               </div>
 
               {dayGoalsLoading ? <div className="mt-2 text-sm text-slate-400">Cargando…</div> : null}
