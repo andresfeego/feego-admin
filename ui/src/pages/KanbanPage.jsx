@@ -315,6 +315,7 @@ export default function KanbanPage() {
   const [secIcon, setSecIcon] = React.useState('Tag')
   const [iconPickerOpen, setIconPickerOpen] = React.useState(false)
   const [iconPickerTarget, setIconPickerTarget] = React.useState('create')
+  const [iconSearch, setIconSearch] = React.useState('')
   const [secEditOpen, setSecEditOpen] = React.useState(false)
   const [secEdit, setSecEdit] = React.useState({ id: 0, name: '', color: '#64748b', icon: 'Tag' })
 
@@ -803,6 +804,13 @@ export default function KanbanPage() {
     }
     return uniq
   }, [])
+
+  const filteredIconCatalog = React.useMemo(() => {
+    const q = String(iconSearch || '').trim().toLowerCase()
+    if (!q) return iconCatalog
+    return iconCatalog.filter((n) => n.toLowerCase().includes(q))
+  }, [iconCatalog, iconSearch])
+
 
   function IconByName({ name, className, style }) {
     const C = Icons[name] || Icons.Tag
@@ -1386,7 +1394,6 @@ export default function KanbanPage() {
                 <Dialog.Overlay className="fixed inset-0 bg-black/60" />
                 <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-lg rounded-2xl p-4">
                   <Dialog.Title className="font-extrabold">Escoge un icono</Dialog.Title>
-                  <div className="text-xs text-slate-400 mt-1">Colección curada (Lucide).</div>
                   <div className="mt-3 grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-[55vh] overflow-auto">
                     {iconCatalog.map(n => (
                       <button
@@ -1397,6 +1404,7 @@ export default function KanbanPage() {
                           } else {
                             setSecIcon(n)
                           }
+                          setIconSearch('')
                           setIconPickerOpen(false)
                         }}
                         className={`rounded-xl border p-2 hover:bg-white/10 ${
@@ -1409,6 +1417,7 @@ export default function KanbanPage() {
                         <IconByName name={n} className="w-5 h-5 mx-auto" />
                       </button>
                     ))}
+                    {!filteredIconCatalog.length ? <div className="col-span-6 text-xs text-slate-400">Sin resultados</div> : null}
                   </div>
                   <div className="mt-4 flex justify-end">
                     <Dialog.Close asChild>
