@@ -1394,8 +1394,16 @@ export default function KanbanPage() {
                 <Dialog.Overlay className="fixed inset-0 bg-black/60" />
                 <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-lg rounded-2xl p-4">
                   <Dialog.Title className="font-extrabold">Escoge un icono</Dialog.Title>
+                  <div className="mt-3 flex justify-end">
+                    <input
+                      value={iconSearch}
+                      onChange={(e) => setIconSearch(e.target.value)}
+                      placeholder="Buscar icono"
+                      className="w-1/2 min-w-[220px] rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                    />
+                  </div>
                   <div className="mt-3 grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-[55vh] overflow-auto">
-                    {iconCatalog.map(n => (
+                    {filteredIconCatalog.map(n => (
                       <button
                         key={n}
                         onClick={() => {
