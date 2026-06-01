@@ -196,10 +196,12 @@ function CardVisual({ c, handle, onOpen, logoSrc = null, draggingOverlay = false
       }
       onClick={() => onOpen(c)}
     >
-      <div className="absolute right-3 top-3">
-        <ProjectAvatar src={logoSrc} sizeClass="w-7 h-7" iconClass="w-3.5 h-3.5 text-slate-400" />
-      </div>
-      <div className="flex items-start gap-2 pr-10">
+      {c.board === 'kanban' ? (
+        <div className="absolute right-3 top-3">
+          <ProjectAvatar src={logoSrc} sizeClass="w-7 h-7" iconClass="w-3.5 h-3.5 text-slate-400" />
+        </div>
+      ) : null}
+      <div className={`flex items-start gap-2 ${c.board === 'kanban' ? 'pr-10' : ''}`}>
         <button
           className="mt-0.5 px-2 py-1 rounded-lg border border-white/10 bg-black/30 text-slate-300"
           style={{ touchAction: 'none' }}
