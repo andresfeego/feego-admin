@@ -168,7 +168,7 @@ function DroppableColumn({ id, header, children, className = '', fluid = false }
   )
 }
 
-function CardVisual({ c, handle, onOpen, draggingOverlay = false, style = {}, setNodeRef = undefined, dragHandleProps = {} }) {
+function CardVisual({ c, handle, onOpen, logoSrc = null, draggingOverlay = false, style = {}, setNodeRef = undefined, dragHandleProps = {} }) {
   const due = formatDueShort(c.due_at)
   const sub = c.project_name ? c.project_name : '—'
   const priority = getPriorityMeta(c.priority)
@@ -196,7 +196,10 @@ function CardVisual({ c, handle, onOpen, draggingOverlay = false, style = {}, se
       }
       onClick={() => onOpen(c)}
     >
-      <div className="flex items-start gap-2">
+      <div className="absolute right-3 top-3">
+        <ProjectAvatar src={logoSrc} sizeClass="w-7 h-7" iconClass="w-3.5 h-3.5 text-slate-400" />
+      </div>
+      <div className="flex items-start gap-2 pr-10">
         <button
           className="mt-0.5 px-2 py-1 rounded-lg border border-white/10 bg-black/30 text-slate-300"
           style={{ touchAction: 'none' }}
@@ -273,7 +276,7 @@ function CardVisual({ c, handle, onOpen, draggingOverlay = false, style = {}, se
   )
 }
 
-function SortableCard({ c, handle, onOpen }) {
+function SortableCard({ c, handle, onOpen, logoSrc = null }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `card:${c.id}` })
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -288,6 +291,7 @@ function SortableCard({ c, handle, onOpen }) {
       c={c}
       handle={handle}
       onOpen={onOpen}
+      logoSrc={logoSrc}
       setNodeRef={setNodeRef}
       style={{ ...style, borderColor: 'var(--feego-border)' }}
       dragHandleProps={{ ...listeners, ...attributes }}
@@ -1057,9 +1061,11 @@ export default function KanbanPage() {
                       fluid={viewKey === 'kanban'}
                       className={`${colIndex === 0 ? 'ml-4' : ''} ${colIndex === containers.length - 1 ? 'mr-4' : ''}`}
                     >
-                      {cards.map((c) => (
-                        <SortableCard key={c.id} c={c} handle={quick} onOpen={openEditCard} />
-                      ))}
+                      {cards.map((c) => {
+                        const pMeta = (state.projects || []).find((p) => Number(p.id) === Number(c.project_id))
+                        const logoSrc = pMeta ? projectAvatar(pMeta) : null
+                        return <SortableCard key={c.id} c={c} handle={quick} onOpen={openEditCard} logoSrc={logoSrc} />
+                      })}
                     </DroppableColumn>
                   </SortableContext>
                 )
