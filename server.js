@@ -22,6 +22,10 @@ const DB_NAME = process.env.DB_NAME || 'feegosystem_admin_db';
 const DB_USER = process.env.DB_USER || 'feego_admin';
 const DB_PASS = process.env.DB_PASS || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const WIPI_PRIVATE_ENABLED = String(process.env.WIPI_PRIVATE_ENABLED || 'false').trim().toLowerCase() === 'true';
+const WIPI_PRIVATE_CLIENT_ID = process.env.WIPI_PRIVATE_CLIENT_ID || 'wipi-local-app';
+const WIPI_PRIVATE_TOKEN = process.env.WIPI_PRIVATE_TOKEN || '';
+const WIPI_PRIVATE_SCOPES = parseScopes(process.env.WIPI_PRIVATE_SCOPES || 'read:kanban');
 const UI_DIST_DIR = process.env.UI_DIST_DIR || '/opt/feego-admin/ui/dist';
 const UI_DIST_ASSETS_DIR = process.env.UI_DIST_ASSETS_DIR || path.join(UI_DIST_DIR, 'assets');
 function getDataRoot() {
@@ -129,6 +133,46 @@ app.use(session({
 function requireAuth(req, res, next) {
   if (req.session && req.session.userId) return next();
   res.status(401).json({ ok: false, error: 'unauthorized' });
+}
+
+function parseScopes(rawScopes) {
+  return String(rawScopes || '')
+    .split(',')
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+}
+
+function safeTokenEquals(actual, expected) {
+  if (!actual || !expected) return false;
+  const actualBuffer = Buffer.from(String(actual));
+  const expectedBuffer = Buffer.from(String(expected));
+  if (actualBuffer.length !== expectedBuffer.length) return false;
+  return crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function extractBearerToken(req) {
+  const header = String(req.get('authorization') || '');
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
+function requireWipiPrivateAuth(requiredScope) {
+  return (req, res, next) => {
+    if (!WIPI_PRIVATE_ENABLED) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+    if (!safeTokenEquals(extractBearerToken(req), WIPI_PRIVATE_TOKEN)) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+    if (requiredScope && !WIPI_PRIVATE_SCOPES.includes(requiredScope)) {
+      return res.status(403).json({ ok: false, error: 'insufficient_scope' });
+    }
+    req.wipiPrivate = {
+      clientId: WIPI_PRIVATE_CLIENT_ID,
+      scopes: WIPI_PRIVATE_SCOPES,
+    };
+    return next();
+  };
 }
 
 function normalizeMountPath(rawPath, fallback) {
@@ -2757,86 +2801,133 @@ async function hasSectionIdsJsonColumn(conn) {
   }
 }
 
+async function getKanbanState(conn) {
+  const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
+  const projects = await conn.query('SELECT id, name, sort, description, logo_path FROM kb_projects WHERE archived=0 ORDER BY sort ASC, id ASC');
+  const sections = await conn.query('SELECT id, project_id, name, color, icon, sort FROM kb_sections WHERE archived=0 ORDER BY project_id ASC, sort ASC, id ASC');
+  const cards = supportsSectionIdsJson
+    ? await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, section_ids_json, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC')
+    : await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC');
+
+  const pmap = { };
+  for (const p of projects) pmap[p.id] = p.name;
+
+  const smap = { };
+  const smapByProjectAndName = { };
+  const sectionKey = (projectId, sectionName) => `${Number(projectId) || 0}::${String(sectionName || '').trim().toLowerCase()}`;
+  for (const s of sections) {
+    const normalized = { id: Number(s.id), project_id: Number(s.project_id), name: s.name, color: s.color, icon: s.icon, sort: s.sort };
+    smap[s.id] = normalized;
+    smapByProjectAndName[sectionKey(s.project_id, s.name)] = normalized;
+  }
+
+  const outCards = cards.map(c => {
+    const parsedSectionIds = (() => {
+      try {
+        const arr = c.section_ids_json ? JSON.parse(c.section_ids_json) : [];
+        if (!Array.isArray(arr)) return [];
+        return arr.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0);
+      } catch {
+        return [];
+      }
+    })();
+    const sectionsResolvedByIds = parsedSectionIds.map((sid) => smap[sid]).filter(Boolean);
+    const sectionsResolvedByNames = (() => {
+      const raw = String(c.section_name || '').trim();
+      if (!raw) return [];
+      const names = raw.includes('||')
+        ? raw.split('||').map((n) => String(n || '').trim()).filter(Boolean)
+        : [];
+      return names
+        .map((name) => smapByProjectAndName[sectionKey(c.project_id, name)])
+        .filter(Boolean);
+    })();
+    const secById = c.section_id ? smap[c.section_id] : null;
+    const secByName = (!secById && c.section_name)
+      ? smapByProjectAndName[sectionKey(c.project_id, c.section_name)]
+      : null;
+    const sec = secById || secByName || null;
+    const cardSections = sectionsResolvedByIds.length > 0
+      ? sectionsResolvedByIds
+      : (sectionsResolvedByNames.length > 0
+        ? sectionsResolvedByNames
+        : (sec ? [sec] : []));
+    return {
+      id: Number(c.id),
+      title: c.title,
+      notes: c.notes || '',
+      project_id: c.project_id ? Number(c.project_id) : null,
+      project_name: c.project_id ? pmap[c.project_id] : null,
+      board: c.board,
+      status: c.status,
+      sort: c.sort,
+      due_at: c.due_at ? new Date(c.due_at).toISOString() : null,
+      section_id: cardSections[0] ? Number(cardSections[0].id) : (c.section_id ? Number(c.section_id) : null),
+      section_name: sec ? sec.name : (c.section_name || null),
+      section_color: sec ? sec.color : null,
+      section_icon: sec ? sec.icon : null,
+      section_ids: cardSections.map((s) => Number(s.id)),
+      sections: cardSections.map((s) => ({ id: Number(s.id), name: s.name, color: s.color, icon: s.icon })),
+      priority: c.priority == null ? null : Number(c.priority),
+      labels: (() => { try { return c.labels_json ? JSON.parse(c.labels_json) : []; } catch { return []; } })(),
+    };
+  });
+
+  return {
+    projects: projects.map(p => ({ id: Number(p.id), name: p.name, sort: p.sort, description: p.description || '', logo_path: p.logo_path || null })),
+    sections: sections.map(s => ({ id: Number(s.id), project_id: Number(s.project_id), name: s.name, color: s.color, icon: s.icon, sort: s.sort })),
+    cards: outCards,
+  };
+}
+
+app.get('/api/private/wipi/v1/health', requireWipiPrivateAuth(), (req, res) => {
+  res.json({
+    ok: true,
+    data: {
+      app: 'feego-admin',
+      api: 'wipi-private',
+      client_id: req.wipiPrivate.clientId,
+      scopes: req.wipiPrivate.scopes,
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
+app.get('/api/private/wipi/v1/kanban/state', requireWipiPrivateAuth('read:kanban'), async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    const state = await getKanbanState(conn);
+    const privateState = {
+      ...state,
+      projects: state.projects.map((project) => ({
+        ...project,
+        logo_url: project.logo_path
+          ? `/api/private/wipi/v1/kanban/project/logo?name=${encodeURIComponent(project.logo_path)}`
+          : null,
+      })),
+    };
+    res.json({ ok: true, data: privateState });
+  } catch (e) {
+    console.error('private/wipi/kanban/state error', e);
+    res.status(500).json({ ok: false, error: 'internal_error' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 app.get('/api/kanban/state', requireAuth, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
-    const projects = await conn.query('SELECT id, name, sort, description, logo_path FROM kb_projects WHERE archived=0 ORDER BY sort ASC, id ASC');
-    const sections = await conn.query('SELECT id, project_id, name, color, icon, sort FROM kb_sections WHERE archived=0 ORDER BY project_id ASC, sort ASC, id ASC');
-    const cards = supportsSectionIdsJson
-      ? await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, section_ids_json, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC')
-      : await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC');
-
-    const pmap = { };
-    for (const p of projects) pmap[p.id] = p.name;
-
-    const smap = { };
-    const smapByProjectAndName = { };
-    const sectionKey = (projectId, sectionName) => `${Number(projectId) || 0}::${String(sectionName || '').trim().toLowerCase()}`;
-    for (const s of sections) {
-      const normalized = { id: Number(s.id), project_id: Number(s.project_id), name: s.name, color: s.color, icon: s.icon, sort: s.sort };
-      smap[s.id] = normalized;
-      smapByProjectAndName[sectionKey(s.project_id, s.name)] = normalized;
-    }
-
-    const outCards = cards.map(c => {
-      const parsedSectionIds = (() => {
-        try {
-          const arr = c.section_ids_json ? JSON.parse(c.section_ids_json) : [];
-          if (!Array.isArray(arr)) return [];
-          return arr.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0);
-        } catch {
-          return [];
-        }
-      })();
-      const sectionsResolvedByIds = parsedSectionIds.map((sid) => smap[sid]).filter(Boolean);
-      const sectionsResolvedByNames = (() => {
-        const raw = String(c.section_name || '').trim();
-        if (!raw) return [];
-        const names = raw.includes('||')
-          ? raw.split('||').map((n) => String(n || '').trim()).filter(Boolean)
-          : [];
-        return names
-          .map((name) => smapByProjectAndName[sectionKey(c.project_id, name)])
-          .filter(Boolean);
-      })();
-      const secById = c.section_id ? smap[c.section_id] : null;
-      const secByName = (!secById && c.section_name)
-        ? smapByProjectAndName[sectionKey(c.project_id, c.section_name)]
-        : null;
-      const sec = secById || secByName || null;
-      const cardSections = sectionsResolvedByIds.length > 0
-        ? sectionsResolvedByIds
-        : (sectionsResolvedByNames.length > 0
-          ? sectionsResolvedByNames
-          : (sec ? [sec] : []));
-      return {
-        id: Number(c.id),
-        title: c.title,
-        notes: c.notes || '',
-        project_id: c.project_id ? Number(c.project_id) : null,
-        project_name: c.project_id ? pmap[c.project_id] : null,
-        board: c.board,
-        status: c.status,
-        sort: c.sort,
-        due_at: c.due_at ? new Date(c.due_at).toISOString() : null,
-        section_id: cardSections[0] ? Number(cardSections[0].id) : (c.section_id ? Number(c.section_id) : null),
-        section_name: sec ? sec.name : (c.section_name || null),
-        section_color: sec ? sec.color : null,
-        section_icon: sec ? sec.icon : null,
-        section_ids: cardSections.map((s) => Number(s.id)),
-        sections: cardSections.map((s) => ({ id: Number(s.id), name: s.name, color: s.color, icon: s.icon })),
-        priority: c.priority == null ? null : Number(c.priority),
-        labels: (() => { try { return c.labels_json ? JSON.parse(c.labels_json) : []; } catch { return []; } })(),
-      };
-    });
+    const state = await getKanbanState(conn);
 
     res.json({
       ok: true,
-      projects: projects.map(p => ({ id: Number(p.id), name: p.name, sort: p.sort, description: p.description || '', logo_path: p.logo_path || null })),
-      sections: sections.map(s => ({ id: Number(s.id), project_id: Number(s.project_id), name: s.name, color: s.color, icon: s.icon, sort: s.sort })),
-      cards: outCards,
+      projects: state.projects,
+      sections: state.sections,
+      cards: state.cards,
     });
   } catch (e) {
     console.error('kanban/state error', e);
@@ -2868,6 +2959,29 @@ const FEEGO_DATA_ROOT = getDataRoot();
 const KANBAN_LOGO_DIR = path.join(FEEGO_DATA_ROOT, 'project-logos');
 fs.mkdirSync(KANBAN_LOGO_DIR, { recursive: true });
 fs.mkdirSync(path.join(FEEGO_DATA_ROOT, 'branding'), { recursive: true });
+
+async function sendKanbanProjectLogo(req, res) {
+  const name = String((req.query && req.query.name) || '');
+  // allow subpaths like project-logos/<file>, but prevent traversal
+  if (!name || name.includes('..') || name.includes('\\')) return res.status(400).end();
+
+  const full = path.resolve(FEEGO_DATA_ROOT, name);
+  if (!full.startsWith(path.resolve(FEEGO_DATA_ROOT) + path.sep)) return res.status(400).end();
+
+  try {
+    const st = await fs.promises.stat(full);
+    res.setHeader('Content-Length', st.size);
+    res.setHeader('Cache-Control', 'no-store');
+    const ext = path.extname(full).toLowerCase();
+    const ct = ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : (ext === '.gif' ? 'image/gif' : 'image/jpeg'));
+    res.setHeader('Content-Type', ct);
+    fs.createReadStream(full).pipe(res);
+  } catch {
+    res.status(404).end();
+  }
+}
+
+app.get('/api/private/wipi/v1/kanban/project/logo', requireWipiPrivateAuth('read:kanban'), sendKanbanProjectLogo);
 
 // --- phpMyAdmin temporary token gate (Nginx auth_request) ---
 const PMA_TOKEN_FILE = path.join(FEEGO_DATA_ROOT, 'pma-token.json');
@@ -2997,27 +3111,7 @@ app.post('/api/kanban/project/logo', requireAuth, kanbanLogoUpload.single('logo'
   }
 });
 
-app.get('/api/kanban/project/logo', requireAuth, async (req, res) => {
-  const name = String((req.query && req.query.name) || '');
-  // allow subpaths like project-logos/<file>, but prevent traversal
-  if (!name || name.includes('..') || name.includes('\\')) return res.status(400).end();
-
-  const full = path.resolve(FEEGO_DATA_ROOT, name);
-  if (!full.startsWith(path.resolve(FEEGO_DATA_ROOT) + path.sep)) return res.status(400).end();
-
-  try {
-    const st = await fs.promises.stat(full);
-    res.setHeader('Content-Length', st.size);
-    res.setHeader('Cache-Control', 'no-store');
-    // best-effort content type
-    const ext = path.extname(full).toLowerCase();
-    const ct = ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : (ext === '.gif' ? 'image/gif' : 'image/jpeg'));
-    res.setHeader('Content-Type', ct);
-    fs.createReadStream(full).pipe(res);
-  } catch {
-    res.status(404).end();
-  }
-});
+app.get('/api/kanban/project/logo', requireAuth, sendKanbanProjectLogo);
 
 app.delete('/api/kanban/project', requireAuth, async (req, res) => {
   const id = Number((req.query && req.query.id) || 0);
