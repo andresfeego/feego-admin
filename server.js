@@ -969,20 +969,53 @@ function hexToRgbSafe(hex, fallback = [31, 77, 182]) {
   ];
 }
 
-function drawWrappedText(page, text, x, y, maxWidth, lineHeight, font, size, color) {
+function getWrappedLines(text, maxWidth, font, size, maxLines = Infinity) {
   const out = [];
   const words = String(text || '').split(/\s+/).filter(Boolean);
   let line = '';
+  const pushLine = (value) => {
+    if (out.length < maxLines) out.push(value);
+  };
+
   for (const w of words) {
     const test = line ? `${line} ${w}` : w;
     if (font.widthOfTextAtSize(test, size) <= maxWidth) {
       line = test;
-    } else {
-      if (line) out.push(line);
-      line = w;
+      continue;
     }
+
+    if (line) {
+      pushLine(line);
+      if (out.length >= maxLines) return out;
+      line = '';
+    }
+
+    if (font.widthOfTextAtSize(w, size) <= maxWidth) {
+      line = w;
+      continue;
+    }
+
+    let chunk = '';
+    for (const ch of w) {
+      const testChunk = `${chunk}${ch}`;
+      if (font.widthOfTextAtSize(testChunk, size) <= maxWidth) {
+        chunk = testChunk;
+      } else {
+        if (chunk) {
+          pushLine(chunk);
+          if (out.length >= maxLines) return out;
+        }
+        chunk = ch;
+      }
+    }
+    line = chunk;
   }
-  if (line) out.push(line);
+  if (line) pushLine(line);
+  return out;
+}
+
+function drawWrappedText(page, text, x, y, maxWidth, lineHeight, font, size, color, maxLines = Infinity) {
+  const out = getWrappedLines(text, maxWidth, font, size, maxLines);
   let yy = y;
   for (const l of out) {
     page.drawText(l, { x, y: yy, size, font, color });
@@ -1251,6 +1284,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
   const colQty = width - margin - 175;
   const colUnit = width - margin - 120;
   const colTotal = width - margin - 58;
+  const itemTextMaxW = colQty - colItem - 14;
   page.drawRectangle({ x: margin, y: y - 20, width: width - margin * 2, height: 20, color: accent });
   page.drawText('ITEM', { x: colItem, y: y - 14, size: 9, font: fontBold, color: rgb(1, 1, 1) });
   page.drawText('CANT.', { x: colQty, y: y - 14, size: 9, font: fontBold, color: rgb(1, 1, 1) });
@@ -1268,14 +1302,18 @@ app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
     const total = qty * unit;
     grand += total;
     const rowBg = idx % 2 === 0 ? rgb(0.985, 0.988, 0.995) : rgb(1, 1, 1);
-    page.drawRectangle({ x: margin, y: y - 20, width: width - margin * 2, height: 20, color: rowBg });
-    page.drawRectangle({ x: margin, y: y - 20, width: width - margin * 2, height: 20, borderColor: rgb(0.93, 0.94, 0.97), borderWidth: 0.6 });
-    page.drawText(`${idx + 1}. ${String(it.name || '').slice(0, 65)}`, { x: colItem, y: y - 14, size: 9, font, color: rgb(0.12, 0.14, 0.18) });
+    const itemLines = getWrappedLines(`${idx + 1}. ${String(it.name || '')}`, itemTextMaxW, font, 9, 4);
+    const rowH = Math.max(20, itemLines.length * 10 + 10);
+    if (y - rowH < 220) break;
+    page.drawRectangle({ x: margin, y: y - rowH, width: width - margin * 2, height: rowH, color: rowBg });
+    page.drawRectangle({ x: margin, y: y - rowH, width: width - margin * 2, height: rowH, borderColor: rgb(0.93, 0.94, 0.97), borderWidth: 0.6 });
+    itemLines.forEach((line, lineIdx) => {
+      page.drawText(line, { x: colItem, y: y - 14 - (lineIdx * 10), size: 9, font, color: rgb(0.12, 0.14, 0.18) });
+    });
     page.drawText(String(qty), { x: colQty + 4, y: y - 14, size: 9, font, color: rgb(0.12, 0.14, 0.18) });
     page.drawText(unit.toLocaleString('es-CO'), { x: colUnit - 2, y: y - 14, size: 9, font, color: rgb(0.12, 0.14, 0.18) });
     page.drawText(total.toLocaleString('es-CO'), { x: colTotal - 2, y: y - 14, size: 9, font: fontBold, color: rgb(0.12, 0.14, 0.18) });
-    y -= 20;
-    if (y < 220) break;
+    y -= rowH;
   }
 
   y -= 12;
@@ -1349,14 +1387,17 @@ app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
     const availableW = PAGE_W - margin * 2;
 
     for (const it of itemsForAnnex) {
-      const titleH = 22;
+      const titleText = `ITEM ${it.idx + 1}: ${it.name}`;
+      const titleLines = getWrappedLines(titleText, availableW - 20, fontBold, 10, 3);
+      const titleH = Math.max(22, titleLines.length * 12 + 10);
       if (py - titleH < contentBottom) {
         p = newPage();
         py = PAGE_H - margin;
       }
-      p.drawRectangle({ x: margin, y: py - titleH, width: availableW, height: titleH, color: rgb(0.92, 0.95, 1) });
       p.drawRectangle({ x: margin, y: py - titleH, width: availableW, height: titleH, borderColor: rgb(0.8, 0.86, 0.96), borderWidth: 1 });
-      p.drawText(`ITEM ${it.idx + 1}: ${it.name}`.slice(0, 110), { x: margin + 10, y: py - 15, size: 10, font: fontBold, color: rgb(0.18, 0.26, 0.45) });
+      titleLines.forEach((line, lineIdx) => {
+        p.drawText(line, { x: margin + 10, y: py - 15 - (lineIdx * 12), size: 10, font: fontBold, color: rgb(0.18, 0.26, 0.45) });
+      });
       py -= (titleH + 10);
 
       if (it.imageUrls.length === 1) {
@@ -1371,7 +1412,6 @@ app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
             p = newPage();
             py = PAGE_H - margin;
           }
-          p.drawRectangle({ x: (PAGE_W - iw) / 2 - 4, y: py - ih - 4, width: iw + 8, height: ih + 8, color: rgb(0.98, 0.99, 1) });
           p.drawRectangle({ x: (PAGE_W - iw) / 2 - 4, y: py - ih - 4, width: iw + 8, height: ih + 8, borderColor: rgb(0.86, 0.9, 0.96), borderWidth: 1 });
           p.drawImage(img, { x: (PAGE_W - iw) / 2, y: py - ih, width: iw, height: ih });
           py -= (ih + 16);
@@ -1392,7 +1432,6 @@ app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
             const idx2 = i + c;
             if (idx2 >= it.imageUrls.length) continue;
             const x = margin + c * (boxW + gap);
-            p.drawRectangle({ x, y: py - boxH, width: boxW, height: boxH, color: rgb(0.98, 0.99, 1) });
             p.drawRectangle({ x, y: py - boxH, width: boxW, height: boxH, borderColor: rgb(0.86, 0.9, 0.96), borderWidth: 1 });
             const img = await getImage(it.imageUrls[idx2]);
             if (!img) continue;
