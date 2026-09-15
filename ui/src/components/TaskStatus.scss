@@ -1,0 +1,3 @@
+.feego-task-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 650; color: var(--feego-muted); }
+.feego-task-status[data-status='doing'] { color: var(--feego-primary); }
+.feego-task-status[data-status='done'] { color: var(--color-accent); }

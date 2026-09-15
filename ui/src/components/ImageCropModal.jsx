@@ -19,6 +19,9 @@ async function getCroppedBlob(imageSrc, pixelCrop, outType = 'image/jpeg', quali
   canvas.height = pixelCrop.height
   const ctx = canvas.getContext('2d')
 
+  // Composite transparency onto white before encoding, including PNG output.
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.drawImage(
     image,
     pixelCrop.x,
@@ -42,6 +45,7 @@ export default function ImageCropModal({
   file,
   aspect = 1,
   title = 'Recortar imagen',
+  outputType = 'image/jpeg',
   onDone,
 }) {
   const [src, setSrc] = React.useState(null)
@@ -58,8 +62,8 @@ export default function ImageCropModal({
 
   async function handleDone() {
     if (!src || !croppedAreaPixels) return
-    // We return a JPEG blob; backend converts/compresses to WEBP
-    const blob = await getCroppedBlob(src, croppedAreaPixels, 'image/jpeg', 0.92)
+    // Return the selected format with an opaque white background.
+    const blob = await getCroppedBlob(src, croppedAreaPixels, outputType, 0.92)
     onDone?.(blob)
     onOpenChange?.(false)
   }
@@ -67,8 +71,8 @@ export default function ImageCropModal({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="feego-overlay fixed inset-0" />
-        <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 w-[95vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-2xl p-4">
+        <Dialog.Overlay className="feego-overlay fixed inset-0 z-[80]" />
+        <Dialog.Content className="feego-modal z-[81] fixed left-1/2 top-1/2 w-[95vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-2xl p-4">
           <div className="flex items-center justify-between gap-3">
             <Dialog.Title className="text-lg font-black">{title}</Dialog.Title>
             <Dialog.Close asChild>
@@ -81,6 +85,7 @@ export default function ImageCropModal({
           <div className="mt-4 relative w-full h-[60vh] rounded-2xl overflow-hidden border" style={{ borderColor: 'var(--feego-border)' }}>
             {src ? (
               <Cropper
+                style={{ containerStyle: { background: '#ffffff' }, mediaStyle: { backgroundColor: '#ffffff' } }}
                 image={src}
                 crop={crop}
                 zoom={zoom}

@@ -1,0 +1,18 @@
+.project-order-overlay { position: fixed; inset: 0; z-index: 70; }
+.project-order-dialog { position: fixed; z-index: 71; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(540px,94vw); max-height: 90dvh; display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; box-shadow: var(--shadow-card); }
+.project-order-dialog > header { display: flex; align-items: center; gap: 12px; padding: 22px; border-bottom: 1px solid var(--feego-border); }
+.project-order-dialog h2 { font-size: 21px; font-weight: 800; letter-spacing: -.03em; }
+.project-order-dialog header p { font-size: 12px; color: var(--feego-muted); margin-top: 4px; }
+.project-order-dialog header button { margin-left: auto; }
+.project-order-emblem { display: grid; place-items: center; padding: 11px; border-radius: 12px; color: var(--feego-primary); background: var(--active-bg); }
+.project-order-body { padding: 16px 22px; overflow-y: auto; }
+.project-order-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--feego-border); background: var(--surface-card-solid); }
+.project-order-row.is-dragging { z-index: 1; box-shadow: var(--shadow-card); border-radius: 12px; }
+.project-order-row strong { font-size: 13px; overflow-wrap: anywhere; }
+.project-order-number { color: var(--feego-muted); font-size: 11px; width: 18px; text-align: center; }
+.project-order-grip { display: grid; place-items: center; padding: 8px 4px; flex-shrink: 0; touch-action: none; cursor: grab; color: var(--feego-muted); }
+.project-order-grip:active { cursor: grabbing; }
+.project-order-grip:focus-visible { outline: 3px solid var(--focus-border); border-radius: 6px; }
+.project-order-dialog > footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px; border-top: 1px solid var(--feego-border); }
+.project-order-error { color: var(--color-danger); font-size: 13px; margin-top: 12px; }
+@media(max-width: 600px) { .project-order-dialog > header,.project-order-body,.project-order-dialog > footer { padding: 16px; } .project-order-emblem { display: none; } }

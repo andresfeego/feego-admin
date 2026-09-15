@@ -1,11 +1,19 @@
 import React from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Icons from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api } from '../lib/api'
 import ImageCropModal from '../components/ImageCropModal.jsx'
 import styles from './KanbanPage.module.scss'
+import './KanbanWorkspace.scss'
+import RoadmapView from '../components/RoadmapView'
+import NewTaskDialog from '../components/NewTaskDialog'
+import EditTaskDialog from '../components/EditTaskDialog'
+import { Button, Input, Textarea } from '../components/ui'
+import '../components/ProjectEditor.scss'
+import ProgressControl, { ProgressBar } from '../components/ProgressControl'
+import { cardPayload, progressValue } from '../lib/roadmap.mjs'
+import { Link } from 'react-router-dom'
 
 import {
   DndContext,
@@ -25,35 +33,14 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-const boards = [
-  { key: 'ideas', title: 'Ideas' },
-  { key: 'kanban', title: 'Kanban' },
-  { key: 'archived', title: 'Archivadas' },
-]
 
-const fieldLabelClass = 'text-[11px] uppercase tracking-wide text-slate-400'
-const fieldInputClass = 'mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2'
-const panelClass = 'rounded-xl border border-white/10 bg-black/20 p-3'
+
 const PRIORITY_OPTIONS = [
   { value: 1, label: 'Alta', icon: 'Flame' },
   { value: 2, label: 'Media', icon: 'Sparkles' },
   { value: 3, label: 'Baja', icon: 'Leaf' },
 ]
 
-function getPriorityMeta(priority) {
-  if (Number(priority) === 1) return { label: 'Alta', className: 'border-red-300/30 bg-red-500/15 text-red-200' }
-  if (Number(priority) === 2) return { label: 'Media', className: 'border-amber-300/30 bg-amber-500/15 text-amber-200' }
-  if (Number(priority) === 3) return { label: 'Baja', className: 'border-blue-300/30 bg-blue-500/15 text-blue-200' }
-  return null
-}
-
-function ArrowBtn({ children, onClick }) {
-  return (
-    <button onClick={onClick} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10">
-      {children}
-    </button>
-  )
-}
 
 function projectAvatar(p) {
   if (p.logo_path) return `/api/kanban/project/logo?name=${encodeURIComponent(p.logo_path)}`
@@ -83,15 +70,6 @@ function ProjectAvatar({ src, sizeClass = 'w-9 h-9', iconClass = 'w-4 h-4 text-s
       )}
     </div>
   )
-}
-
-function toDatetimeLocalValue(isoDate) {
-  if (!isoDate) return ''
-  const d = new Date(isoDate)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n) => String(n).padStart(2, '0')
-  // Use local time getters (not UTC) because <input type=datetime-local> expects local.
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function formatDueShort(isoDate) {
@@ -141,9 +119,10 @@ function ProjectLogoPicker({ logoPath, previewUrl, onPick, aspect = 1 }) {
           file={pendingFile}
           aspect={aspect}
           title="Recortar logo"
+          outputType="image/png"
           onDone={(blob) => {
             if (!blob) return
-            const cropped = new File([blob], (pendingFile?.name || 'logo') + '.jpg', { type: blob.type || 'image/jpeg' })
+            const cropped = new File([blob], (pendingFile?.name || 'logo') + '.png', { type: blob.type || 'image/png' })
             const preview = URL.createObjectURL(blob)
             onPick(cropped, preview)
             setPendingFile(null)
@@ -154,13 +133,13 @@ function ProjectLogoPicker({ logoPath, previewUrl, onPick, aspect = 1 }) {
   )
 }
 
-function DroppableColumn({ id, header, children, className = '', fluid = false }) {
+function DroppableColumn({ id, header, children }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div className={`${fluid ? 'min-w-0 flex-1' : 'w-72 shrink-0'} ${className}`}>
-      <div className={`rounded-2xl border p-4 min-h-[60vh] ${isOver ? 'border-blue-400/50 bg-blue-500/10' : 'border-white/10 bg-black/20'}`}>
+    <div className="kanban-column">
+      <div className={`kanban-column-surface${isOver ? ' is-over' : ''}`}>
         {header}
-        <div ref={setNodeRef} className="mt-4 space-y-2 min-h-[40vh]">
+        <div ref={setNodeRef} className="kanban-dropzone">
           {children}
         </div>
       </div>
@@ -169,113 +148,21 @@ function DroppableColumn({ id, header, children, className = '', fluid = false }
 }
 
 function CardVisual({ c, handle, onOpen, logoSrc = null, draggingOverlay = false, style = {}, setNodeRef = undefined, dragHandleProps = {} }) {
+  const [actionBusy, setActionBusy] = React.useState(false)
+  async function runAction(action) { setActionBusy(true); try { await handle(action, c) } finally { setActionBusy(false) } }
   const due = formatDueShort(c.due_at)
-  const sub = c.project_name ? c.project_name : '—'
-  const priority = getPriorityMeta(c.priority)
-  const legacySection = (c.section_icon || c.section_name)
-    ? [{ id: `legacy-${c.id}`, icon: c.section_icon || 'Tag', color: c.section_color || undefined, name: c.section_name || 'Sección' }]
-    : []
-  const cardSections = Array.isArray(c.sections) && c.sections.length > 0 ? c.sections : legacySection
-  const labels = Array.isArray(c.labels) ? c.labels.slice(0, 2) : []
-  const moreLabels = Array.isArray(c.labels) && c.labels.length > 2 ? c.labels.length - 2 : 0
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        ...style,
-        borderColor: 'var(--feego-border)',
-      }}
-      className={
-        `relative overflow-hidden rounded-2xl border p-4 pb-14 cursor-pointer transition-all duration-200 ease-out ${
-          c.board === 'kanban'
-            ? 'bg-white/10 shadow-sm hover:shadow-lg'
-            : 'bg-white/5'
-        } ` +
-        (draggingOverlay ? 'shadow-2xl ring-2 ring-blue-400/40' : '')
-      }
-      onClick={() => onOpen(c)}
-    >
-      {c.board === 'kanban' ? (
-        <div className="absolute right-3 top-3">
-          <ProjectAvatar src={logoSrc} sizeClass="w-7 h-7" iconClass="w-3.5 h-3.5 text-slate-400" />
-        </div>
-      ) : null}
-      <div className={`flex items-start gap-2 ${c.board === 'kanban' ? 'pr-10' : ''}`}>
-        <button
-          className="mt-0.5 px-2 py-1 rounded-lg border border-white/10 bg-black/30 text-slate-300"
-          style={{ touchAction: 'none' }}
-          title="Arrastrar"
-          onClick={(e) => e.stopPropagation()}
-          {...dragHandleProps}
-        >
-          ⠿
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="font-bold break-words">{c.title}</div>
-          <div className="text-xs text-slate-400 mt-0.5">{sub}{c.board === 'kanban' ? ` · ${c.status}` : ''}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {priority && (
-              <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${priority.className}`}>
-                {priority.label}
-              </span>
-            )}
-            {labels.map((lb) => (
-              <span key={lb} className="px-2 py-0.5 rounded-md text-[11px] border border-white/10 bg-white/5 text-slate-300">
-                {lb}
-              </span>
-            ))}
-            {moreLabels > 0 && (
-              <span className="px-2 py-0.5 rounded-md text-[11px] border border-white/10 bg-white/5 text-slate-400">
-                +{moreLabels}
-              </span>
-            )}
-            {due && (
-              <span className="px-2 py-0.5 rounded-md text-[11px] border border-white/10 bg-black/30 text-slate-300">
-                🗓 {due}
-              </span>
-            )}
-          </div>
-          {cardSections.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {cardSections.map((sec) => {
-                const SIcon = sec.icon && Icons[sec.icon] ? Icons[sec.icon] : Icons.Tag
-                return (
-                  <SIcon
-                    key={sec.id}
-                    className="w-4 h-4"
-                    style={{ color: sec.color || undefined }}
-                    title={sec.name || 'Sección'}
-                  />
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* corner action */}
-      {c.board === 'ideas' && (
-        <button
-          className={styles.ideasCornerAction}
-          title="Pasar a Por hacer"
-          onClick={(e) => { e.stopPropagation(); handle('toTodo', c) }}
-        >
-          <Icons.ArrowRight className="w-4 h-4" />
-        </button>
-      )}
-
-      {c.board === 'kanban' && c.status === 'done' && (
-        <button
-          className="absolute right-3 bottom-3 w-10 h-10 rounded-full bg-white/10 hover:bg-white/15 border border-white/10 flex items-center justify-center"
-          title="Archivar"
-          onClick={(e) => { e.stopPropagation(); handle('archive', c) }}
-        >
-          ⤵
-        </button>
-      )}
-    </div>
-  )
+  const priority = PRIORITY_OPTIONS.find(p => p.value === Number(c.priority))
+  const PriorityIcon = priority ? Icons[priority.icon] : null
+  const cardSections = c.sections?.length ? c.sections : c.section_name ? [{id:`legacy-${c.id}`,icon:c.section_icon || 'Tag',name:c.section_name,color:c.section_color}] : []
+  const labels = Array.isArray(c.labels) ? c.labels : []
+  return <article ref={setNodeRef} style={style} className={`kanban-task${draggingOverlay ? ' is-dragging' : ''}`} onClick={() => onOpen(c)}>
+    <div className="kanban-task-top"><div className="kanban-task-project"><ProjectAvatar src={logoSrc} sizeClass="w-7 h-7" iconClass="w-4 h-4" /><span>{c.project_name || 'Sin proyecto'}</span></div><button type="button" className="kanban-task-grip" title="Arrastrar" onClick={e => e.stopPropagation()} {...dragHandleProps} aria-label={`Mover ${c.title}`}><Icons.GripVertical size={18} /></button></div>
+    <button type="button" className="kanban-task-title" onClick={e=>{e.stopPropagation();onOpen(c)}}>{c.title}</button>
+    {!(c.board === 'kanban' && c.status === 'todo') && <div className="kanban-task-progress"><ProgressBar value={progressValue(c.progress_pct)} label={`Progreso de ${c.title}`} /><strong>{progressValue(c.progress_pct)}%</strong></div>}
+    {!!cardSections.length && <div className="kanban-task-sections">{cardSections.map(sec=>{const Icon=Icons[sec.icon] || Icons.Tag;return <span key={sec.id} title={sec.name}><Icon size={13} style={{color:sec.color || undefined}} />{sec.name}</span>})}</div>}
+    {!!labels.length && <div className="kanban-task-labels">{labels.slice(0,2).map(label=><span key={label}>{label}</span>)}{labels.length>2 && <span>+{labels.length-2}</span>}</div>}
+    <footer className="kanban-task-footer">{priority && <span className="kanban-task-priority" data-priority={priority.value}><PriorityIcon size={14} />{priority.label}</span>}{due && <span className="kanban-task-due"><Icons.CalendarDays size={13} />{due}</span>}{c.board === 'kanban' && c.status === 'todo' && <button type="button" className="kanban-task-return" title="Devolver a planificación de Roadmap" aria-label={`Devolver ${c.title} a Roadmap`} disabled={actionBusy} onClick={e=>{e.stopPropagation();runAction('toRoadmap')}}><Icons.Undo2 size={17} /></button>}{c.status === 'done' && <button type="button" className="kanban-task-archive" title="Archivar tarea" aria-label={`Archivar ${c.title}`} disabled={actionBusy} onClick={e=>{e.stopPropagation();runAction('archive')}}><Icons.Archive size={17} /></button>}</footer>
+  </article>
 }
 
 function SortableCard({ c, handle, onOpen, logoSrc = null }) {
@@ -302,17 +189,37 @@ function SortableCard({ c, handle, onOpen, logoSrc = null }) {
   )
 }
 
-export default function KanbanPage() {
-  const [idx, setIdx] = React.useState(1)
+export default function KanbanPage() { return <KanbanWorkspace /> }
+
+export function KanbanWorkspace({ roadmap = false }) {
   const [state, setState] = React.useState({ projects: [], sections: [], cards: [] })
+  const stateRef = React.useRef(state)
+  stateRef.current = state
   const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState('')
+  const [savingCard, setSavingCard] = React.useState(false)
+  const [movePrompt, setMovePrompt] = React.useState(null)
+  const [moveValue, setMoveValue] = React.useState('')
+  const moveResolve = React.useRef(null)
+  const dragBusy = React.useRef(false)
+  function finishMove(value) {
+    moveResolve.current?.(value)
+    moveResolve.current = null
+    setMovePrompt(null)
+  }
+  React.useEffect(() => () => { moveResolve.current?.(null) }, [])
+  function askMoveProgress(card) {
+    setMovePrompt(card)
+    setMoveValue('')
+    return new Promise(resolve => { moveResolve.current = resolve })
+  }
   const dragOriginContainerRef = React.useRef(null)
 
   const [newProjectOpen, setNewProjectOpen] = React.useState(false)
   const [projectName, setProjectName] = React.useState('')
 
   const [editOpen, setEditOpen] = React.useState(false)
-  const [edit, setEdit] = React.useState({ id: 0, name: '', description: '', logo_path: null })
+  const [edit, setEdit] = React.useState({ id: 0, name: '', description: '', logo_path: null, priority: null })
   const [editLogoFile, setEditLogoFile] = React.useState(null)
   const [editLogoPreview, setEditLogoPreview] = React.useState(null)
 
@@ -336,11 +243,6 @@ export default function KanbanPage() {
     setNewCardOpen(true)
   }
 
-  // per-column section filter (Ideas board only): { [projectId]: sectionName|'__ALL__'|'__NONE__' }
-  const [sectionFilterByProject, setSectionFilterByProject] = React.useState({})
-  // per-column priority filter (Ideas board only): { [projectId]: priority|'__ALL__' }
-  const [priorityFilterByProject, setPriorityFilterByProject] = React.useState({})
-
   const sensors = useSensors(
     // iOS Safari: TouchSensor can interfere with horizontal scroll; PointerSensor works better.
     useSensor(PointerSensor, { activationConstraint: { distance: 12 } }),
@@ -349,9 +251,14 @@ export default function KanbanPage() {
 
   async function refresh() {
     setLoading(true)
-    const r = await api('/api/kanban/state')
-    if (r.ok) setState(r.data)
-    setLoading(false)
+    setError('')
+    try {
+      const r = await api('/api/kanban/state')
+      if (!r.ok || !r.data?.ok) throw new Error('No se pudieron cargar los datos')
+      stateRef.current = r.data
+      setState(r.data)
+    } catch (e) { setError(e.message || 'No se pudo conectar con el servidor') }
+    finally { setLoading(false) }
   }
 
   React.useEffect(() => {
@@ -373,22 +280,22 @@ export default function KanbanPage() {
     } else alert('Error creando proyecto')
   }
 
+  const quickLocks = React.useRef(new Set())
   async function quick(act, c) {
-    if (act === 'toTodo') {
-      await api('/api/kanban/move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: c.id, board: 'kanban', status: 'todo' }),
-      })
-    }
-    if (act === 'archive') {
-      await api('/api/kanban/move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: c.id, board: 'archived', status: 'n/a' }),
-      })
-    }
-    refresh()
+    if (quickLocks.current.has(c.id)) return
+    if (act === 'toRoadmap' && (c.board !== 'kanban' || c.status !== 'todo')) return
+    const destination = act === 'toRoadmap' ? { board: 'ideas', status: 'n/a' }
+      : act === 'archive' ? { board: 'archived', status: 'n/a' }
+      : act === 'toTodo' ? { board: 'kanban', status: 'todo' } : null
+    if (!destination) return
+    quickLocks.current.add(c.id)
+    try {
+      const r = await api('/api/kanban/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id, ...destination }) })
+      if (!r.ok || !r.data?.ok) throw Error('No se pudo mover la tarea. Intenta de nuevo.')
+      await refresh()
+      if (act === 'toRoadmap') toast.success('Tarea devuelta a la planificación de Roadmap')
+    } catch (e) { toast.error(e.message || 'No se pudo conectar con el servidor') }
+    finally { quickLocks.current.delete(c.id) }
   }
 
   function containerIdForCard(c) {
@@ -405,37 +312,16 @@ export default function KanbanPage() {
   }
 
   function cardsInContainer(containerId) {
-    let out = state.cards.filter((c) => containerIdForCard(c) === containerId)
-
-    // Ideas: apply section filter per project column
-    if (boards[idx].key === 'ideas' && containerId.startsWith('ideas:project:')) {
-      const pid = Number(containerId.split(':').pop())
-      const sectionSel = sectionFilterByProject[pid] || '__ALL__'
-      const prioritySel = priorityFilterByProject[pid] || '__ALL__'
-
-      if (sectionSel === '__NONE__') {
-        out = out.filter((c) => !c.section_name)
-      } else if (sectionSel !== '__ALL__') {
-        out = out.filter((c) => (c.section_name || '') === sectionSel)
-      }
-
-      if (prioritySel !== '__ALL__') {
-        out = out.filter((c) => Number(c.priority) === Number(prioritySel))
-      }
-    }
+    let out = stateRef.current.cards.filter((c) => containerIdForCard(c) === containerId)
 
     out.sort((a, b) => (a.sort || 0) - (b.sort || 0))
     return out
   }
 
-  function containersForView() {
-    const k = boards[idx].key
-    if (k === 'kanban') return ['kanban:todo', 'kanban:doing', 'kanban:done']
-    if (k === 'ideas') return state.projects.map((p) => `ideas:project:${p.id}`)
-    return state.projects.map((p) => `archived:project:${p.id}`)
-  }
+  function containersForView() { return ['kanban:todo', 'kanban:doing', 'kanban:done'] }
 
   function onDragStart(event) {
+    if (dragBusy.current) return
     const activeId = String(event.active?.id || '')
     if (!activeId.startsWith('card:')) return
     const cardId = Number(activeId.split(':')[1])
@@ -450,6 +336,7 @@ export default function KanbanPage() {
   }
 
   function onDragOver(event) {
+    if (dragBusy.current) return
     const { active, over } = event
     if (!over) return
 
@@ -458,13 +345,13 @@ export default function KanbanPage() {
     if (!activeId.startsWith('card:')) return
 
     const cardId = Number(activeId.split(':')[1])
-    const activeCard = state.cards.find((x) => Number(x.id) === cardId)
+    const activeCard = stateRef.current.cards.find((x) => Number(x.id) === cardId)
     if (!activeCard) return
 
     let toContainer = overId
     if (overId.startsWith('card:')) {
       const overCardId = Number(overId.split(':')[1])
-      const overCard = state.cards.find((x) => Number(x.id) === overCardId)
+      const overCard = stateRef.current.cards.find((x) => Number(x.id) === overCardId)
       if (!overCard) return
       toContainer = containerIdForCard(overCard)
     }
@@ -475,7 +362,8 @@ export default function KanbanPage() {
     const currentContainer = containerIdForCard(activeCard)
     if (currentContainer === toContainer) return
 
-    setState((prev) => {
+    {
+      const prev = stateRef.current
       const nextCards = prev.cards.map((card) => {
         if (Number(card.id) !== Number(cardId)) return card
         return {
@@ -491,11 +379,16 @@ export default function KanbanPage() {
           sections: toInfo.project_id !== undefined ? [] : (card.sections || []),
         }
       })
-      return { ...prev, cards: nextCards }
-    })
+      const next = { ...prev, cards: nextCards }
+      stateRef.current = next
+      setState(next)
+    }
   }
 
   async function onDragEnd(event) {
+    if (dragBusy.current) return
+    dragBusy.current = true
+    try {
     const { active, over } = event
     if (!over) {
       dragOriginContainerRef.current = null
@@ -508,7 +401,7 @@ export default function KanbanPage() {
     if (!activeId.startsWith('card:')) return
 
     const cardId = Number(activeId.split(':')[1])
-    const c = state.cards.find((x) => Number(x.id) === cardId)
+    const c = stateRef.current.cards.find((x) => Number(x.id) === cardId)
     if (!c) return
     const fromContainer = dragOriginContainerRef.current || containerIdForCard(c)
     dragOriginContainerRef.current = null
@@ -520,7 +413,7 @@ export default function KanbanPage() {
     let overCardId = null
     if (overId.startsWith('card:')) {
       overCardId = Number(overId.split(':')[1])
-      const oc = state.cards.find((x) => Number(x.id) === overCardId)
+      const oc = stateRef.current.cards.find((x) => Number(x.id) === overCardId)
       if (!oc) return
       toContainer = containerIdForCard(oc)
     }
@@ -528,6 +421,14 @@ export default function KanbanPage() {
     const toInfo = parseContainer(toContainer)
     if (!toInfo) return
     const sameContainer = fromContainer === toContainer
+    let moveProgress
+    if (!sameContainer && toInfo.board === 'kanban') {
+      moveProgress = toInfo.status === 'done' ? 100 : toInfo.status === 'todo' ? 0 : progressValue(c.progress_pct)
+      if (toInfo.status === 'doing' && (moveProgress === 0 || moveProgress === 100)) {
+        moveProgress = await askMoveProgress(c)
+        if (moveProgress === null) { await refresh(); return }
+      }
+    }
 
     const fromCards = cardsInContainer(fromContainer)
     const toCards = sameContainer ? fromCards : cardsInContainer(toContainer)
@@ -561,11 +462,15 @@ export default function KanbanPage() {
           body.project_id = movedCardOverrides.project_id
         }
 
-        await api('/api/kanban/move', {
+        if (movedCardOverrides && Number(card.id) === Number(movedCardOverrides.id) && movedCardOverrides.progress_pct !== undefined) {
+          body.progress_pct = movedCardOverrides.progress_pct
+        }
+        const result = await api('/api/kanban/move', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
+        if (!result.ok) throw new Error('No se pudo guardar el movimiento')
       }
     }
 
@@ -596,7 +501,7 @@ export default function KanbanPage() {
     await persistContainerOrder(
       toInfo,
       nextTo,
-      { id: c.id, project_id: toInfo.project_id }
+      { id: c.id, project_id: toInfo.project_id, progress_pct: moveProgress }
     )
     // Then compact source sorts.
     await persistContainerOrder(fromInfo, remainingFrom)
@@ -604,15 +509,20 @@ export default function KanbanPage() {
     refresh()
     return
 
+    } catch (e) { toast.error(e.message || 'No se pudo guardar el movimiento'); await refresh() }
+    finally { dragBusy.current = false }
   }
 
   function openEditProject(p) {
-    setEdit({ id: p.id, name: p.name, description: p.description || '', logo_path: p.logo_path || null })
+    setEdit({ id: p.id, name: p.name, description: p.description || '', logo_path: p.logo_path || null, priority: p.priority ?? null })
     setEditLogoFile(null)
     setEditLogoPreview(null)
     setSecName('')
     setSecColor('#64748b')
     setSecIcon('Tag')
+    setSecEditOpen(false)
+    setIconPickerOpen(false)
+    setIconSearch('')
     setEditOpen(true)
   }
 
@@ -629,8 +539,27 @@ export default function KanbanPage() {
       due_at: c.due_at || null,
       priority: [1, 2, 3].includes(Number(c.priority)) ? Number(c.priority) : null,
       labels: Array.isArray(c.labels) ? c.labels : [],
+      progress_pct: progressValue(c.progress_pct),
+      sync_progress: false,
+      board: c.board,
+      status: c.status,
     })
     setCardOpen(true)
+  }
+
+  const saveTaskLock = React.useRef(false)
+  async function saveEditedTask(task) {
+    if (saveTaskLock.current) return
+    if (!Number.isInteger(task.progress_pct) || task.progress_pct < 0 || task.progress_pct > 100) { toast.error('Usa un porcentaje entero entre 0 y 100'); return }
+    saveTaskLock.current = true; setSavingCard(true)
+    try {
+      const payload = cardPayload(task, { sync_progress: canEditProgress && task.sync_progress })
+      if (!canEditProgress || !task.sync_progress) delete payload.progress_pct
+      const r = await api('/api/kanban/card/update', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+      if (!r.ok) { toast.error(r.status === 409 ? 'No se pudo guardar. Actualiza los datos e intenta de nuevo.' : 'No se pudo guardar la tarea'); return }
+      setCardOpen(false); await refresh()
+    } catch { toast.error('No se pudo conectar para guardar la tarea') }
+    finally { saveTaskLock.current = false; setSavingCard(false) }
   }
 
   async function archiveCardFromModal() {
@@ -649,10 +578,10 @@ export default function KanbanPage() {
     if (!cardEdit.id) return
     const r = await api(`/api/kanban/card?id=${encodeURIComponent(cardEdit.id)}`, { method: 'DELETE' })
     if (!r.ok) {
-      toast.error('Error eliminando tarjeta')
+      toast.error('Error eliminando tarea')
       return
     }
-    toast.success('Tarjeta eliminada')
+    toast.success('Tarea eliminada')
     setCardOpen(false)
     refresh()
   }
@@ -668,7 +597,7 @@ export default function KanbanPage() {
             : 'toast-out 180ms ease-in forwards',
         }}
       >
-        <div className="font-bold text-sm">¿Eliminar tarjeta definitivamente?</div>
+        <div className="font-bold text-sm">¿Eliminar tarea definitivamente?</div>
         <div className="text-xs text-slate-400 mt-1">
           Esta acción no se puede deshacer.
         </div>
@@ -700,7 +629,7 @@ export default function KanbanPage() {
     const r = await api('/api/kanban/project/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: edit.id, name, description: edit.description || '' }),
+      body: JSON.stringify({ id: edit.id, name, description: edit.description || '', priority: edit.priority }),
     })
     if (!r.ok) return alert('Error guardando proyecto')
 
@@ -818,6 +747,18 @@ export default function KanbanPage() {
   }, [iconCatalog, iconSearch])
 
 
+  function renderProjectIcons() {
+    return <div className="project-icon-picker" role="group" aria-label="Iconos de sección">
+      <label htmlFor="project-icon-search"><Icons.Search size={15} />Buscar icono</label>
+      <Input id="project-icon-search" value={iconSearch} onChange={e => setIconSearch(e.target.value)} placeholder="Ej: Code, Wrench, Book…" />
+      <div className="project-icon-grid">{filteredIconCatalog.map(name => <button type="button" key={name} title={name} aria-label={name} aria-pressed={(iconPickerTarget === 'edit' ? secEdit.icon : secIcon) === name} onClick={() => {
+        if (iconPickerTarget === 'edit') setSecEdit(prev => ({ ...prev, icon: name }))
+        else setSecIcon(name)
+        setIconPickerOpen(false); setIconSearch('')
+      }}><IconByName name={name} /></button>)}{!filteredIconCatalog.length && <p>Sin resultados</p>}</div>
+    </div>
+  }
+
   function IconByName({ name, className, style }) {
     const C = Icons[name] || Icons.Tag
     return <C className={className || 'w-4 h-4'} style={style} />
@@ -838,6 +779,8 @@ export default function KanbanPage() {
 
   function openEditSection(s) {
     setSecEdit({ id: s.id, name: s.name, color: s.color || '#64748b', icon: s.icon || 'Tag' })
+    setIconPickerOpen(false)
+    setIconSearch('')
     setSecEditOpen(true)
   }
 
@@ -873,27 +816,23 @@ export default function KanbanPage() {
     refresh()
   }
 
-  const viewKey = boards[idx].key
+  const canEditProgress = !roadmap && cardEdit.board === 'kanban' && cardEdit.status === 'doing'
   const containers = containersForView()
 
   return (
-    <div className="space-y-4 -mx-4 md:-mx-6">
-      {/* Header: arrows+title centered; buttons below */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-center gap-2 w-full overflow-hidden">
-          <ArrowBtn onClick={() => setIdx((idx + boards.length - 1) % boards.length)}>‹</ArrowBtn>
-          <div className="font-black text-lg text-center min-w-[140px]">{boards[idx].title}</div>
-          <ArrowBtn onClick={() => setIdx((idx + 1) % boards.length)}>›</ArrowBtn>
-        </div>
-
-        <div className="flex items-center justify-end mr-8">
+    <div className={roadmap ? "space-y-4" : "kanban-workspace"}>
+      <div className={roadmap ? "hidden" : "kanban-toolbar"}>
+        <div><div className="kanban-eyebrow">EJECUCIÓN DIARIA</div><h1>Kanban</h1><p>{state.cards.filter(c => c.board === 'kanban').length} tareas en el tablero</p></div>
+        <div className="kanban-toolbar-actions">
+          <Button variant="outline" aria-label="Actualizar Kanban" title="Actualizar" onClick={refresh} disabled={loading}><Icons.RefreshCw size={18} /></Button>
+          <Link to="/roadmap" className="feego-btn feego-btn-outline kanban-roadmap-link"><Icons.Map size={17} />Roadmap</Link>
             <Dialog.Root open={newProjectOpen} onOpenChange={setNewProjectOpen}>
               <Dialog.Trigger asChild>
-                <button className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">Nuevo proyecto</button>
+                <Button><Icons.FolderPlus size={17} />Nuevo proyecto</Button>
               </Dialog.Trigger>
             <Dialog.Portal>
-              <Dialog.Overlay className="feego-overlay fixed inset-0" />
-              <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md rounded-2xl p-4">
+              <Dialog.Overlay className="feego-overlay fixed inset-0 z-[70]" />
+              <Dialog.Content className="feego-modal z-[71] max-h-[85dvh] overflow-y-auto fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md rounded-2xl p-4">
                 <Dialog.Title className="font-extrabold">Nuevo proyecto</Dialog.Title>
                 <div className="text-xs text-slate-400 mt-1">Solo nombre por ahora.</div>
                 <input value={projectName} onChange={(e) => setProjectName(e.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2" placeholder="Ej: Mako" />
@@ -909,10 +848,11 @@ export default function KanbanPage() {
         </div>
       </div>
 
-      {loading ? (
+      {roadmap ? <RoadmapView state={state} loading={loading} error={error} refresh={refresh}
+        onNewProject={() => setNewProjectOpen(true)} onEditProject={openEditProject} onNewCard={openNewCard} onEditCard={openEditCard} /> : loading ? (
         <div className="text-sm text-slate-400">Cargando…</div>
       ) : (
-        <div className="w-full max-w-full md:rounded-2xl md:border md:border-white/10 md:bg-white/5 md:backdrop-blur-xl p-0">
+        <div className="kanban-board">
           {/* Full-width viewport container; horizontal scroll ONLY inside this container */}
           <DndContext
             sensors={sensors}
@@ -926,7 +866,7 @@ export default function KanbanPage() {
             onDragEnd={onDragEnd}
           >
             <div
-              className={`w-full max-w-full flex gap-4 overflow-y-hidden pb-6 ${viewKey === 'kanban' ? 'overflow-x-auto lg:overflow-x-hidden' : 'overflow-x-scroll'}`}
+              className="kanban-columns"
               style={{
                 WebkitOverflowScrolling: 'touch',
                 overflowAnchor: 'none',
@@ -936,123 +876,10 @@ export default function KanbanPage() {
               {containers.map((cid, colIndex) => {
                 const info = parseContainer(cid)
                 const cards = cardsInContainer(cid)
-                let header = null
-                if (cid.startsWith('kanban:')) {
-                  const st = cid.split(':')[1]
-                  const title = st === 'todo' ? 'Por hacer' : st === 'doing' ? 'Haciendo' : 'Hecho'
-                  const tone = st === 'todo'
-                    ? 'border-blue-400/30 bg-blue-500/15 text-blue-200'
-                    : st === 'doing'
-                      ? 'border-amber-400/30 bg-amber-500/15 text-amber-200'
-                      : 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
-                  header = (
-                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-semibold">{title}</div>
-                          <div className="text-xs text-slate-400">Kanban</div>
-                        </div>
-                        <span className={`px-2 py-2 min-w-8 text-center rounded-lg text-xs font-semibold border ${tone}`}>
-                          {cards.length}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                } else {
-                  const pid = Number(cid.split(':').pop())
-                  const p = state.projects.find((x) => Number(x.id) === pid)
-                  const img = p ? projectAvatar(p) : null
-                  header = (
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <ProjectAvatar src={img} />
-                        <div className="min-w-0">
-                          <div className="font-extrabold truncate">{p?.name || 'Proyecto'}</div>
-                          <div className="text-xs text-slate-400">
-                            {viewKey === 'ideas' ? 'Ideas' : 'Archivadas'} · {cards.length}
-                          </div>
-                          {p?.description && (
-                            <div className="text-[11px] text-slate-400 truncate">{p.description}</div>
-                          )}
-                        </div>
-                      </div>
-
-                      {(viewKey === 'ideas') && p && (
-                        <div className="flex items-center gap-2">
-                          {/* add card (ideas) */}
-                          <button
-                            onClick={() => openNewCard(p.id)}
-                            className="px-2 py-1 rounded-lg border border-white/10 bg-emerald-600/20 hover:bg-emerald-600/30"
-                            title="Agregar tarjeta"
-                          >
-                            <Icons.Plus className="w-4 h-4" />
-                          </button>
-
-                          {/* section filter per project column */}
-                          <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild>
-                              <button className="px-2 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" title="Filtrar por sección">
-                                <Icons.Filter className="w-4 h-4" />
-                              </button>
-                            </DropdownMenu.Trigger>
-                            <DropdownMenu.Portal>
-                              <DropdownMenu.Content sideOffset={6} className="feego-modal max-h-[60vh] overflow-auto rounded-2xl p-1">
-                                <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-slate-400">Sección</div>
-                                <DropdownMenu.Item
-                                  className="px-3 py-2 text-sm rounded-lg hover:bg-white/10"
-                                  onSelect={(e) => { e.preventDefault(); setSectionFilterByProject((m) => ({ ...m, [p.id]: '__ALL__' })) }}
-                                >
-                                  Todas
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Item
-                                  className="px-3 py-2 text-sm rounded-lg hover:bg-white/10"
-                                  onSelect={(e) => { e.preventDefault(); setSectionFilterByProject((m) => ({ ...m, [p.id]: '__NONE__' })) }}
-                                >
-                                  Sin sección
-                                </DropdownMenu.Item>
-                                <div className="h-px bg-white/10 my-1" />
-                                {sectionListForProject(state, p.id)
-                                  .map((sec) => (
-                                    <DropdownMenu.Item
-                                      key={sec.id}
-                                      className="px-3 py-2 text-sm rounded-lg hover:bg-white/10 flex items-center gap-2"
-                                      onSelect={(e) => { e.preventDefault(); setSectionFilterByProject((m) => ({ ...m, [p.id]: sec.name })) }}
-                                    >
-                                      <IconByName name={sec.icon} className="w-4 h-4 shrink-0" style={{ color: sec.color || undefined }} />
-                                      <span className="truncate">{sec.name}</span>
-                                    </DropdownMenu.Item>
-                                  ))}
-                                <div className="h-px bg-white/10 my-1" />
-                                <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-slate-400">Prioridad</div>
-                                <DropdownMenu.Item
-                                  className="px-3 py-2 text-sm rounded-lg hover:bg-white/10"
-                                  onSelect={(e) => { e.preventDefault(); setPriorityFilterByProject((m) => ({ ...m, [p.id]: '__ALL__' })) }}
-                                >
-                                  Todas
-                                </DropdownMenu.Item>
-                                {PRIORITY_OPTIONS.map((opt) => (
-                                  <DropdownMenu.Item
-                                    key={opt.value}
-                                    className="px-3 py-2 text-sm rounded-lg hover:bg-white/10 flex items-center gap-2"
-                                    onSelect={(e) => { e.preventDefault(); setPriorityFilterByProject((m) => ({ ...m, [p.id]: opt.value })) }}
-                                  >
-                                    <IconByName name={opt.icon} className="w-4 h-4 shrink-0" />
-                                    <span>{opt.label}</span>
-                                  </DropdownMenu.Item>
-                                ))}
-                              </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                          </DropdownMenu.Root>
-
-                          {/* edit project */}
-                          <button onClick={() => openEditProject(p)} className="px-2 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" title="Editar proyecto">
-                            <Icons.Pencil className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                }
+                const st = cid.split(':')[1]
+                const title = st === 'todo' ? 'Por hacer' : st === 'doing' ? 'Haciendo' : 'Hecho'
+                const StatusIcon = st === 'todo' ? Icons.CircleDashed : st === 'doing' ? Icons.LoaderCircle : Icons.CircleCheck
+                const header = <div className="kanban-column-header" data-status={st}><StatusIcon size={19} /><h2>{title}</h2><span>{cards.length}</span></div>
                 const items = cards.map((c) => `card:${c.id}`)
 
                 return (
@@ -1060,8 +887,6 @@ export default function KanbanPage() {
                     <DroppableColumn
                       id={cid}
                       header={header}
-                      fluid={viewKey === 'kanban'}
-                      className={`${colIndex === 0 ? 'ml-4' : ''} ${colIndex === containers.length - 1 ? 'mr-4' : ''}`}
                     >
                       {cards.map((c) => {
                         const pMeta = (state.projects || []).find((p) => Number(p.id) === Number(c.project_id))
@@ -1078,406 +903,74 @@ export default function KanbanPage() {
         </div>
       )}
 
-      {/* New card modal */}
-      <Dialog.Root open={newCardOpen} onOpenChange={setNewCardOpen}>
+      {!roadmap && error && <div role="alert" className="p-4 text-red-500">{error} <button onClick={refresh}>Reintentar</button></div>}
+      <Dialog.Root open={!!movePrompt} onOpenChange={open => { if (!open) finishMove(null) }}>
         <Dialog.Portal>
-          <Dialog.Overlay className="feego-overlay fixed inset-0" />
-          <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-2xl rounded-2xl p-4">
-            <Dialog.Title className="font-extrabold">Nueva tarjeta</Dialog.Title>
-            <div className="text-xs text-slate-400 mt-1">Se crea en el tablero <b>ideas</b>.</div>
-
-            <div className="mt-3 space-y-3">
-              <div className={panelClass}>
-                <div className="text-sm font-semibold">Detalles</div>
-                <div className="mt-3">
-                  <div className={fieldLabelClass}>Título</div>
-                  <input value={newCard.title} onChange={(e) => setNewCard({ ...newCard, title: e.target.value })} className={fieldInputClass} />
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <div className={fieldLabelClass}>Proyecto</div>
-                  <select value={newCard.project_id || ''} onChange={(e) => {
-                    const pid = e.target.value ? Number(e.target.value) : null;
-                    setNewCard({ ...newCard, project_id: pid, section_id: null, section_ids: [] });
-                  }} className={fieldInputClass}>
-                    <option value="">(sin proyecto)</option>
-                    {(state.projects || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  </div>
-                  <div>
-                    <div className={fieldLabelClass}>Sección</div>
-                    <select value={newCard.section_id || ''} onChange={(e) => {
-                      const sid = e.target.value ? Number(e.target.value) : null
-                      setNewCard({ ...newCard, section_id: sid, section_ids: sid ? [sid] : [] })
-                    }} className={fieldInputClass}>
-                      <option value="">Sin sección</option>
-                      {sectionListForProject(state, newCard.project_id).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <div className={fieldLabelClass}>Fecha límite</div>
-                    <input
-                      value={toDatetimeLocalValue(newCard.due_at)}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setNewCard({ ...newCard, due_at: v ? new Date(v).toISOString() : null })
-                      }}
-                      type="datetime-local"
-                      className={fieldInputClass}
-                    />
-                  </div>
-                  <div>
-                    <div className={fieldLabelClass}>Prioridad</div>
-                    <select value={newCard.priority || ''} onChange={(e) => setNewCard({ ...newCard, priority: e.target.value ? Number(e.target.value) : null })} className={fieldInputClass}>
-                      <option value="">—</option>
-                      {PRIORITY_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-                      <IconByName name={PRIORITY_OPTIONS.find((o) => o.value === Number(newCard.priority))?.icon} className="w-4 h-4" />
-                      <span>Por defecto: Baja</span>
-                    </div>
-                  </div>
-                  <div />
-                </div>
-              </div>
-
-              <div className={panelClass}>
-                <div className={fieldLabelClass}>Notas</div>
-                <textarea value={newCard.notes} onChange={(e) => setNewCard({ ...newCard, notes: e.target.value })} className={fieldInputClass} rows={4} />
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-end gap-2">
-              <Dialog.Close asChild>
-                <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5">Cancelar</button>
-              </Dialog.Close>
-              <button onClick={async ()=>{
-                const payload = {
-                  title: (newCard.title || '').trim(),
-                  notes: newCard.notes || '',
-                  project_id: newCard.project_id,
-                  section_id: newCard.section_id,
-                  priority: newCard.priority,
-                  due_at: newCard.due_at,
-                  section_ids: Array.isArray(newCard.section_ids) ? newCard.section_ids : [],
-                  board: 'ideas',
-                  status: 'todo',
-                };
-                if(!payload.title){ alert('Falta el título'); return; }
-                const r = await api('/api/kanban/card', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-                if(!r.ok){ alert('Error creando tarjeta'); return; }
-                setNewCardOpen(false);
-                refresh();
-              }} className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold">Crear</button>
+          <Dialog.Overlay className="feego-overlay fixed inset-0 z-50" />
+          <Dialog.Content aria-describedby={undefined} className="feego-modal fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md rounded-2xl p-5">
+            <Dialog.Title className="font-bold mb-3">Progreso al pasar a Haciendo</Dialog.Title>
+            <p className="text-sm feego-muted mb-4">{movePrompt?.title}</p>
+            <ProgressControl label="Porcentaje en proceso" min={1} max={99} value={moveValue} onChange={setMoveValue} />
+            <div className="flex justify-end gap-2 mt-4">
+              <button className="feego-btn feego-btn-outline rounded-lg px-3 py-2" onClick={() => finishMove(null)}>Cancelar</button>
+              <button className="feego-btn feego-btn-primary rounded-lg px-3 py-2" disabled={!Number.isInteger(moveValue) || moveValue < 1 || moveValue > 99} onClick={() => finishMove(moveValue)}>Guardar movimiento</button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      <NewTaskDialog open={newCardOpen} onOpenChange={setNewCardOpen} task={newCard} setTask={setNewCard} projects={state.projects} sections={state.sections} onCreated={refresh} />
 
-      {/* Edit card modal */}
-      <Dialog.Root open={cardOpen} onOpenChange={setCardOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="feego-overlay fixed inset-0" />
-          <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-2xl rounded-2xl p-4">
-            <Dialog.Title className="font-extrabold">Editar tarjeta</Dialog.Title>
-            <div className="text-xs text-slate-400 mt-1">Edición completa (guardado en BD).</div>
+      <EditTaskDialog open={cardOpen} onOpenChange={setCardOpen} task={cardEdit} setTask={setCardEdit} projects={state.projects} sections={state.sections} canEditProgress={canEditProgress} saving={savingCard} onSave={saveEditedTask} onArchive={archiveCardFromModal} onDelete={confirmDeleteCardFromModal} />
 
-            <div className="mt-3 space-y-3">
-              <div className={panelClass}>
-                <div className="text-sm font-semibold">Detalles</div>
-                <div className="mt-3">
-                  <div className={fieldLabelClass}>Título</div>
-                  <input value={cardEdit.title} onChange={(e) => setCardEdit({ ...cardEdit, title: e.target.value })} className={fieldInputClass} />
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <div className={fieldLabelClass}>Proyecto</div>
-                  <select value={cardEdit.project_id || ''} onChange={(e) => {
-                    const pid = e.target.value ? Number(e.target.value) : null;
-                    setCardEdit({ ...cardEdit, project_id: pid, section_id: null, section_ids: [] });
-                  }} className={fieldInputClass}>
-                    <option value="">(sin proyecto)</option>
-                    {(state.projects || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  </div>
-                  <div>
-                    <div className={fieldLabelClass}>Sección</div>
-                    <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-white/10 bg-black/30 p-2 min-h-[42px]">
-                      {sectionListForProject(state, cardEdit.project_id).map((s) => {
-                        const selected = Array.isArray(cardEdit.section_ids) && cardEdit.section_ids.includes(Number(s.id))
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => {
-                              const current = Array.isArray(cardEdit.section_ids) ? cardEdit.section_ids : []
-                              const next = selected
-                                ? current.filter((id) => Number(id) !== Number(s.id))
-                                : [...current, Number(s.id)]
-                              setCardEdit({
-                                ...cardEdit,
-                                section_ids: next,
-                                section_id: next.length > 0 ? next[0] : null,
-                              })
-                            }}
-                            className={`px-2 py-1 rounded-md border text-xs inline-flex items-center gap-1 ${selected ? 'bg-white/10' : 'bg-white/5'}`}
-                            style={{ borderColor: selected ? 'var(--color-accent)' : (s.color || 'rgba(255,255,255,0.12)') }}
-                            title={s.name}
-                          >
-                            <IconByName name={s.icon} className="w-3.5 h-3.5" style={{ color: s.color || undefined }} />
-                            <span>{s.name}</span>
-                          </button>
-                        )
-                      })}
-                      {sectionListForProject(state, cardEdit.project_id).length === 0 && (
-                        <div className="text-xs text-slate-400">Sin secciones disponibles</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className={panelClass}>
-                <div className="text-sm font-semibold">Planificación</div>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <div className={fieldLabelClass}>Fecha límite</div>
-                    <input value={toDatetimeLocalValue(cardEdit.due_at)} onChange={(e) => {
-                      const v = e.target.value;
-                      setCardEdit({ ...cardEdit, due_at: v ? new Date(v).toISOString() : null });
-                    }} type="datetime-local" className={fieldInputClass} />
-                  </div>
-                  <div>
-                    <div className={fieldLabelClass}>Prioridad</div>
-                    <select value={cardEdit.priority || ''} onChange={(e) => setCardEdit({ ...cardEdit, priority: e.target.value ? Number(e.target.value) : null })} className={fieldInputClass}>
-                      <option value="">—</option>
-                      {PRIORITY_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <div className={fieldLabelClass}>Labels (separadas por coma)</div>
-                    <input value={(cardEdit.labels || []).join(', ')} onChange={(e) => setCardEdit({ ...cardEdit, labels: e.target.value.split(',').map(x=>x.trim()).filter(Boolean) })} className={fieldInputClass} placeholder="ej: urgente, clientes" />
-                  </div>
-                </div>
-              </div>
-
-              <div className={panelClass}>
-                <div className={fieldLabelClass}>Notas</div>
-                <textarea value={cardEdit.notes} onChange={(e) => setCardEdit({ ...cardEdit, notes: e.target.value })} className={fieldInputClass} rows={4} />
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-between gap-2">
-              <div className="flex gap-2">
-                <button
-                  onClick={archiveCardFromModal}
-                  className="w-9 h-9 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 inline-flex items-center justify-center"
-                  title="Archivar tarjeta"
-                >
-                  <Icons.Archive className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={confirmDeleteCardFromModal}
-                  className={`${styles.dangerAction} w-9 h-9 rounded-lg inline-flex items-center justify-center`}
-                  title="Eliminar tarjeta"
-                >
-                  <Icons.Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <Dialog.Close asChild>
-                  <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5">Cancelar</button>
-                </Dialog.Close>
-                <button onClick={async ()=>{
-                  const r = await api('/api/kanban/card/update', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cardEdit) });
-                  if(!r.ok){
-                    if (r.status === 409 || r.data?.error === 'multi_section_requires_migration') {
-                      alert('Para guardar múltiples secciones por tarjeta, ejecuta "npm run migrate" en backend y reinicia el servidor.')
-                      return
-                    }
-                    alert('Error guardando')
-                    return
-                  }
-                  setCardOpen(false);
-                  refresh();
-                }} className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold">Guardar</button>
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      {/* Edit project modal */}
+      {/* Keep section and icon editing in one dialog so choosing an icon cannot dismiss its parent. */}
       <Dialog.Root open={editOpen} onOpenChange={setEditOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="feego-overlay fixed inset-0" />
-          <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-2xl rounded-2xl p-4">
-            <Dialog.Title className="font-extrabold">Editar proyecto</Dialog.Title>
-
-            {/* Logo picker (hidden input) */}
-            <ProjectLogoPicker
-              logoPath={edit.logo_path}
-              previewUrl={editLogoPreview}
-              onPick={(file, preview) => { setEditLogoFile(file); setEditLogoPreview(preview); }}
-            />
-
-            <div className="mt-3 space-y-3">
-              <div className={panelClass}>
-                <div className="text-sm font-semibold">Identidad</div>
-                <div className="mt-3">
-                  <div className={fieldLabelClass}>Nombre</div>
-                  <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} className={fieldInputClass} />
-                </div>
-                <div className="mt-3">
-                  <div className={fieldLabelClass}>Descripción</div>
-                  <textarea value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} className={fieldInputClass} rows={3} />
-                </div>
+          <Dialog.Overlay className="feego-overlay project-editor-overlay" />
+          <Dialog.Content className="feego-modal project-editor">
+            <header className="project-editor-header">
+              <span className="project-editor-emblem"><Icons.FolderPen size={24} /></span>
+              <div><Dialog.Title>Editar proyecto</Dialog.Title><Dialog.Description>Identidad y secciones del proyecto.</Dialog.Description></div>
+              <Dialog.Close asChild><Button type="button" variant="ghost" aria-label="Cerrar proyecto"><Icons.X size={19} /></Button></Dialog.Close>
+            </header>
+            <div className="project-editor-body">
+              <div className="project-editor-identity">
+                <div className="project-editor-logo"><ProjectLogoPicker logoPath={edit.logo_path} previewUrl={editLogoPreview} onPick={(file, preview) => { setEditLogoFile(file); setEditLogoPreview(preview) }} /><span>Imagen del proyecto</span></div>
+                <div><label htmlFor="project-edit-name">Nombre del proyecto</label><Input id="project-edit-name" value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} maxLength={255} />
+                  <label htmlFor="project-edit-description">Descripción <span>Opcional</span></label><Textarea id="project-edit-description" value={edit.description} onChange={e => setEdit({ ...edit, description: e.target.value })} rows={2} /></div>
               </div>
-
-              {/* Sections manager */}
-              <div className={panelClass}>
-                <div className="text-sm font-semibold">Secciones</div>
-
-                <div className="mt-2 flex gap-2">
-                  <input value={secName} onChange={(e)=>setSecName(e.target.value)} className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2" placeholder="Ej: QMT" />
-                  <input value={secColor} onChange={(e)=>setSecColor(e.target.value)} type="color" className="w-12 h-10 rounded-lg border border-white/10 bg-black/30" title="Color" />
-                  <button
-                    onClick={() => { setIconPickerTarget('create'); setIconPickerOpen(true) }}
-                    className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
-                    title="Icono"
-                  >
-                    <IconByName name={secIcon} className="w-5 h-5" />
-                  </button>
-                  <button onClick={addSection} className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold">Agregar</button>
+              <section className="project-editor-priority"><h3><Icons.Flag size={16} />Prioridad del proyecto</h3><div className="new-task-priorities" role="group" aria-label="Prioridad del proyecto">
+                <button type="button" className="new-task-badge" aria-pressed={edit.priority == null} onClick={() => setEdit(p => ({...p, priority:null}))}><Icons.Minus size={15} />Sin prioridad</button>
+                {PRIORITY_OPTIONS.map(p => <button type="button" key={p.value} className="new-task-badge" data-priority={p.value} aria-pressed={edit.priority === p.value} onClick={() => setEdit(v => ({...v, priority:p.value}))}><IconByName name={p.icon} />{p.label}</button>)}
+              </div></section>
+              <section className="project-editor-sections">
+                <h3><Icons.Tags size={18} />Secciones <span>{sectionListForProject(state, edit.id).length}</span></h3>
+                <div className="project-section-list">
+                  {sectionListForProject(state, edit.id).map(s => <button type="button" key={s.id} aria-pressed={secEditOpen && secEdit.id === s.id} onClick={() => openEditSection(s)} className="project-section-chip" aria-label={`Editar sección ${s.name}`}>
+                    <IconByName name={s.icon} style={{ color: s.color || undefined }} /><span>{s.name}</span><Icons.Pencil size={13} />
+                  </button>)}
+                  {!sectionListForProject(state, edit.id).length && <p className="feego-muted">Aún no hay secciones.</p>}
                 </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {sectionListForProject(state, edit.id).map(s => (
-                    <button
-                      key={s.id}
-                      onClick={()=>openEditSection(s)}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white/5 hover:bg-white/10"
-                      style={{ borderColor: 'var(--feego-border)' }}
-                      title="Editar sección"
-                    >
-                      <IconByName name={s.icon} className="w-4 h-4" style={{ color: s.color || undefined }} />
-                      <span className="text-sm font-semibold">{s.name}</span>
-                    </button>
-                  ))}
-                  {sectionListForProject(state, edit.id).length === 0 && (
-                    <div className="text-xs text-slate-400">Aún no hay secciones.</div>
-                  )}
-                </div>
-              </div>
+                {secEditOpen ? <div className="project-section-editor" role="group" aria-label="Editar sección">
+                  <h4>Editar sección</h4>
+                  <label htmlFor="section-edit-name">Nombre</label><Input id="section-edit-name" value={secEdit.name} onChange={e => setSecEdit({ ...secEdit, name: e.target.value })} />
+                  <div className="project-section-tools">
+                    <label className="project-color-control">Color<input aria-label="Color de sección" type="color" value={secEdit.color} onChange={e => setSecEdit({ ...secEdit, color: e.target.value })} /></label>
+                    <Button type="button" variant="outline" aria-label="Elegir icono de sección" aria-expanded={iconPickerOpen && iconPickerTarget === 'edit'} onClick={() => { setIconPickerTarget('edit'); setIconSearch(''); setIconPickerOpen(v => !v || iconPickerTarget !== 'edit') }}><IconByName name={secEdit.icon} style={{color:secEdit.color}} />{secEdit.icon}<Icons.ChevronDown size={14} /></Button>
+                  </div>
+                  {iconPickerOpen && iconPickerTarget === 'edit' && renderProjectIcons()}
+                  <div className="project-section-actions"><Button type="button" variant="ghost" className="project-delete" aria-label="Eliminar sección" onClick={() => deleteSection(secEdit.id)}><Icons.Trash2 size={16} /></Button><Button type="button" variant="outline" onClick={() => { setSecEditOpen(false); setIconPickerOpen(false) }}>Cancelar sección</Button><Button type="button" disabled={!secEdit.name.trim()} onClick={saveSection}><Icons.Check size={16} />Guardar sección</Button></div>
+                </div> : <div className="project-section-create">
+                  <label htmlFor="section-new-name">Nueva sección</label>
+                  <div className="project-section-create-row"><Input id="section-new-name" placeholder="Nombre de la sección" value={secName} onChange={e => setSecName(e.target.value)} />
+                    <input type="color" aria-label="Color de nueva sección" value={secColor} onChange={e => setSecColor(e.target.value)} />
+                    <Button type="button" variant="outline" aria-label="Elegir icono de nueva sección" aria-expanded={iconPickerOpen && iconPickerTarget === 'create'} onClick={() => { setIconPickerTarget('create'); setIconSearch(''); setIconPickerOpen(v => !v || iconPickerTarget !== 'create') }}><IconByName name={secIcon} style={{color:secColor}} /></Button>
+                    <Button type="button" disabled={!secName.trim()} onClick={addSection}><Icons.Plus size={16} />Agregar</Button>
+                  </div>
+                  {iconPickerOpen && iconPickerTarget === 'create' && renderProjectIcons()}
+                </div>}
+              </section>
             </div>
-
-            <div className="mt-4 flex justify-between gap-2">
-              <button
-                onClick={confirmDeleteProjectPermanent}
-                className={`${styles.dangerAction} w-9 h-9 rounded-lg inline-flex items-center justify-center`}
-                title="Eliminar definitivamente proyecto"
-              >
-                <Icons.Trash2 className="w-4 h-4" />
-              </button>
-              <div className="flex gap-2">
-                <Dialog.Close asChild>
-                  <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5">Cancelar</button>
-                </Dialog.Close>
-                <button onClick={saveProject} className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold">Guardar</button>
-              </div>
-            </div>
-
-            {/* Icon Picker Modal */}
-            <Dialog.Root open={iconPickerOpen} onOpenChange={setIconPickerOpen}>
-              <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 bg-black/60" />
-                <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-lg rounded-2xl p-4">
-                  <Dialog.Title className="font-extrabold">Escoge un icono</Dialog.Title>
-                  <div className="mt-3 flex justify-end">
-                    <input
-                      value={iconSearch}
-                      onChange={(e) => setIconSearch(e.target.value)}
-                      placeholder="Buscar icono"
-                      className="w-1/2 min-w-[220px] rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="mt-3 grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-[55vh] overflow-auto">
-                    {filteredIconCatalog.map(n => (
-                      <button
-                        key={n}
-                        onClick={() => {
-                          if (iconPickerTarget === 'edit') {
-                            setSecEdit((prev) => ({ ...prev, icon: n }))
-                          } else {
-                            setSecIcon(n)
-                          }
-                          setIconSearch('')
-                          setIconPickerOpen(false)
-                        }}
-                        className={`rounded-xl border p-2 hover:bg-white/10 ${
-                          (iconPickerTarget === 'edit' ? secEdit.icon : secIcon) === n
-                            ? 'border-blue-500/50 bg-blue-500/10'
-                            : 'border-white/10 bg-white/5'
-                        }`}
-                        title={n}
-                      >
-                        <IconByName name={n} className="w-5 h-5 mx-auto" />
-                      </button>
-                    ))}
-                    {!filteredIconCatalog.length ? <div className="col-span-6 text-xs text-slate-400">Sin resultados</div> : null}
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <Dialog.Close asChild>
-                      <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5">Cerrar</button>
-                    </Dialog.Close>
-                  </div>
-                </Dialog.Content>
-              </Dialog.Portal>
-            </Dialog.Root>
-
-            {/* Edit Section Modal */}
-            <Dialog.Root open={secEditOpen} onOpenChange={setSecEditOpen}>
-              <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 bg-black/60" />
-                <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md rounded-2xl p-4">
-                  <Dialog.Title className="font-extrabold">Editar sección</Dialog.Title>
-                  <div className="mt-3 space-y-3">
-                    <div>
-                      <div className={fieldLabelClass}>Nombre</div>
-                      <input value={secEdit.name} onChange={(e)=>setSecEdit({ ...secEdit, name: e.target.value })} className={fieldInputClass} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input value={secEdit.color} onChange={(e)=>setSecEdit({ ...secEdit, color: e.target.value })} type="color" className="w-12 h-10 rounded-lg border border-white/10 bg-black/30" />
-                      <button
-                        onClick={() => { setIconPickerTarget('edit'); setIconPickerOpen(true) }}
-                        className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
-                      >
-                        <IconByName name={secEdit.icon} className="w-5 h-5" style={{ color: secEdit.color || undefined }} />
-                      </button>
-                      <div className="text-xs text-slate-400">Icono: {secEdit.icon}</div>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex justify-between gap-2">
-                    <button onClick={()=>deleteSection(secEdit.id)} className="px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/10 text-red-200">Eliminar</button>
-                    <div className="flex gap-2">
-                      <Dialog.Close asChild>
-                        <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5">Cancelar</button>
-                      </Dialog.Close>
-                      <button onClick={saveSection} className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold">Guardar</button>
-                    </div>
-                  </div>
-                </Dialog.Content>
-              </Dialog.Portal>
-            </Dialog.Root>
+            <footer className="project-editor-footer"><Button type="button" variant="ghost" className="project-delete" aria-label="Eliminar definitivamente proyecto" onClick={confirmDeleteProjectPermanent}><Icons.Trash2 size={18} /></Button><Dialog.Close asChild><Button type="button" variant="outline">Cancelar</Button></Dialog.Close><Button type="button" disabled={!edit.name.trim()} onClick={saveProject}><Icons.Check size={17} />Guardar proyecto</Button></footer>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

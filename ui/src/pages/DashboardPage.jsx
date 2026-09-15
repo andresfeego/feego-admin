@@ -1,4 +1,8 @@
 import React from 'react'
+import { Server, Cpu, MemoryStick, Activity, Clock3, Globe, Settings, RefreshCw, ChevronDown, Layers3, HardDrive, Container, ShieldCheck, FileText, Network, Terminal, ArrowUpRight } from 'lucide-react'
+import OperationsHeader from '../components/OperationsHeader'
+import ProjectColorsDialog from '../components/ProjectColorsDialog'
+import './AdminPages.scss'
 import Calendar from 'react-calendar'
 import Holidays from 'date-holidays'
 import '../styles/calendar-min.css'
@@ -39,22 +43,24 @@ function fmtBogota(isoOrDate) {
 
 
 function Tile({ title, value, sub }) {
+  const Icon = ({ Servidor: Server, Memoria: MemoryStick, Carga: Activity, CPU: Cpu, Uptime: Clock3, "IP pública": Globe })[title] || Activity
   return (
-    <Card className="p-4">
-      <div className="text-xs feego-muted">{title}</div>
+    <Card className="ops-metric p-4">
+      <div className="ops-metric-label"><Icon size={17} />{title}</div>
       <div className="mt-2 text-2xl font-bold break-words">{value}</div>
-      {sub ? <div className="mt-2 text-xs text-slate-400 break-words">{sub}</div> : null}
+      {sub ? <div className="mt-2 text-xs ops-muted break-words">{sub}</div> : null}
     </Card>
   )
 }
 
 function Section({ title, children }) {
   const [open, setOpen] = React.useState(true)
+  const Icon = ({ Proyectos: Layers3, Servicios: Activity, Docker: Container, Red: Network, "Disco (df -h)": HardDrive, "SSL (Let’s Encrypt)": ShieldCheck, "VPS.md (runbook)": FileText })[title] || Terminal
   return (
-    <Card className="p-4">
-      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between">
-        <div className="text-lg font-bold">{title}</div>
-        <div className="text-sm text-slate-400">{open ? 'Ocultar' : 'Mostrar'}</div>
+    <Card className="ops-section p-4">
+      <button onClick={() => setOpen((v) => !v)} className="ops-section-heading" aria-expanded={open}>
+        <span><Icon size={18} />{title}</span>
+        <ChevronDown size={18} style={{ transform: open ? undefined : 'rotate(-90deg)' }} />
       </button>
       {open ? <div className="mt-3">{children}</div> : null}
     </Card>
@@ -63,7 +69,7 @@ function Section({ title, children }) {
 
 function Pre({ text }) {
   return (
-    <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto max-h-[420px]">
+    <pre className="text-xs leading-5 p-3 rounded-xl ops-inset border ops-border overflow-auto max-h-[420px]">
       {text || '—'}
     </pre>
   )
@@ -184,7 +190,7 @@ function Modal({ open, onClose, title, children }) {
         <Card className="w-full max-w-3xl p-5 md:p-6 relative">
           <div className="flex items-start justify-between gap-4">
             <div className="text-xl font-bold">{title}</div>
-            <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={onClose}>
+            <button className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10" onClick={onClose}>
               Cerrar
             </button>
           </div>
@@ -217,17 +223,17 @@ function parseMdSections(md) {
 function ProjectCard({ p, onClick }) {
   const statusColor =
     p.status === 'migrated'
-      ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/25'
+      ? 'bg-emerald-500/15 ops-success border-emerald-500/25'
       : p.status === 'pending'
-        ? 'bg-amber-500/15 text-amber-200 border-amber-500/25'
-        : 'bg-sky-500/15 text-sky-200 border-sky-500/25'
+        ? 'bg-amber-500/15 ops-warning border-amber-500/25'
+        : 'bg-sky-500/15 ops-accent border-sky-500/25'
 
   return (
     <button onClick={onClick} className="text-left group">
-      <Card className="p-4 hover:bg-white/10 transition-colors">
+      <Card className="ops-project p-4 hover:bg-white/10 transition-colors">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 overflow-hidden flex items-center justify-center">
-            {p.logo_url ? <img src={p.logo_url} alt={p.name} className="w-full h-full object-contain" /> : <div className="text-xs text-slate-400">—</div>}
+          <div className="ops-project-logo w-10 h-10 rounded-xl bg-white/10 border ops-border overflow-hidden flex items-center justify-center">
+            {p.logo_url ? <img src={p.logo_url} alt={p.name} className="w-full h-full object-contain" /> : <div className="text-xs ops-muted">—</div>}
           </div>
           <div className="min-w-0">
             <div className="font-bold truncate">{p.name}</div>
@@ -236,21 +242,21 @@ function ProjectCard({ p, onClick }) {
         </div>
         <div className="mt-3 flex items-center gap-2">
           {typeof p.pending_count === 'number' && p.pending_count > 0 ? (
-            <div className="inline-flex items-center px-2 py-0.5 text-[11px] rounded-full border border-amber-500/25 bg-amber-500/10 text-amber-200">
+            <div className="inline-flex items-center px-2 py-0.5 text-[11px] rounded-full border border-amber-500/25 bg-amber-500/10 ops-warning">
               Pendientes: {p.pending_count}
             </div>
           ) : null}
         </div>
-        <div className="mt-3 text-xs text-slate-300 flex flex-col gap-1">
+        <div className="mt-3 text-xs ops-muted flex flex-col gap-1">
           {(p.domains || []).slice(0, 3).map((d) => (
-            <a key={d} className="font-mono truncate text-slate-200 hover:text-white" href={(d.startsWith('http://') || d.startsWith('https://')) ? d : ('https://' + d)} target="_blank" rel="noreferrer">
+            <a key={d} className="font-mono truncate ops-text hover:text-white" href={(d.startsWith('http://') || d.startsWith('https://')) ? d : ('https://' + d)} target="_blank" rel="noreferrer">
               <span className="inline-flex items-center gap-1">
-                <span className="text-slate-400">↗</span>
+                <ArrowUpRight size={13} />
                 <span>{d}</span>
               </span>
             </a>
           ))}
-          {(p.domains || []).length > 3 ? <div className="text-slate-400">+{(p.domains || []).length - 3} más</div> : null}
+          {(p.domains || []).length > 3 ? <div className="ops-muted">+{(p.domains || []).length - 3} más</div> : null}
         </div>
       </Card>
     </button>
@@ -339,7 +345,7 @@ function Pie({ data, total, colors }) {
   }
 
   return (
-    <svg width={128} height={128} viewBox="0 0 128 128" className="rounded-xl bg-black/20 border border-white/10">
+    <svg width={128} height={128} viewBox="0 0 128 128" className="rounded-xl ops-inset border ops-border">
       {entries.length === 0 ? (
         <circle cx={cx} cy={cy} r={r} fill="rgba(255,255,255,0.06)" />
       ) : (
@@ -363,6 +369,7 @@ function Pie({ data, total, colors }) {
 const HIDDEN_PROJECT_SLUGS = new Set(['davivienda', 'vivienda']);
 
 export default function DashboardPage() {
+  const [colorsOpen, setColorsOpen] = React.useState(false)
   const [st, setSt] = React.useState(null)
   const [ov, setOv] = React.useState(null)
   const [err, setErr] = React.useState(null)
@@ -477,18 +484,14 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[32px] leading-[40px] font-bold">Dashboard</div>
-          <div className="text-sm leading-5 text-slate-400">Estado del VPS (solo lectura)</div>
-        </div>
-        <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={async () => { await refreshStats(); await refreshProjects({ showOverlay: true }); await refreshProjectStatus({ showOverlay: true }) }}>
-          Refrescar
-        </button>
-      </div>
+    <div className="ops-page dashboard-page space-y-6">
+      <OperationsHeader icon={Server} eyebrow="INFRAESTRUCTURA" title="Dashboard VPS" description="Estado del servidor, proyectos y actividad.">
+        <button className="ops-button ops-icon-button" title="Configurar Dashboard VPS" aria-label="Configurar Dashboard VPS" onClick={() => setColorsOpen(true)}><Settings size={19} /></button>
+        <button className="ops-button" onClick={async () => { await refreshStats(); await refreshProjects({ showOverlay: true }); await refreshProjectStatus({ showOverlay: true }) }}><RefreshCw size={16} />Actualizar</button>
+      </OperationsHeader>
+      <ProjectColorsDialog open={colorsOpen} onOpenChange={setColorsOpen} onSaved={() => refreshProjects({ showOverlay: false })} />
 
-      {err ? <div className="text-sm text-red-300">{err}</div> : null}
+      {err ? <div className="text-sm ops-danger">{err}</div> : null}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         <Tile title="Servidor" value={st ? (st.hostname + ' · ' + st.uptime) : '…'} />
@@ -508,11 +511,11 @@ export default function DashboardPage() {
       <Section title="Proyectos">
         
         <div className="relative">
-                {!projectsLoading && (infraProjects || []).length === 0 ? <div className="text-sm text-slate-400">No hay proyectos registrados.</div> : null}
+                {!projectsLoading && (infraProjects || []).length === 0 ? <div className="text-sm ops-muted">No hay proyectos registrados.</div> : null}
 
           {projectsLoading ? (
             <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl">
-              <div className="text-sm text-slate-200">Cargando proyectos…</div>
+              <div className="text-sm ops-text">Cargando proyectos…</div>
             </div>
           ) : null}
 
@@ -551,44 +554,44 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs feego-muted">Estado del proyecto (LAB/PROD)</div>
-                  <div className="mt-1 text-xs text-slate-400">Front / Back / DB</div>
+                  <div className="mt-1 text-xs ops-muted">Front / Back / DB</div>
                 </div>
-                <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" onClick={() => refreshProjectStatus({ showOverlay: true })}>
+                <button className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10 text-sm" onClick={() => refreshProjectStatus({ showOverlay: true })}>
                   Refrescar
                 </button>
               </div>
 
               {(() => {
                 const ps = (projectStatus || []).find((x) => x.slug === activeProject?.slug)
-                if (!ps) return <div className="mt-2 text-sm text-slate-400">No hay estado para este proyecto.</div>
+                if (!ps) return <div className="mt-2 text-sm ops-muted">No hay estado para este proyecto.</div>
 
-                const pill = (ok) => ok === true ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/30' : ok === false ? 'bg-red-500/15 text-red-200 border-red-500/30' : 'bg-slate-500/10 text-slate-200 border-white/10'
+                const pill = (ok) => ok === true ? 'bg-emerald-500/15 ops-success border-emerald-500/30' : ok === false ? 'bg-red-500/15 ops-danger border-red-500/30' : 'bg-slate-500/10 ops-text ops-border'
                 const label = (ok) => ok === true ? 'OK' : ok === false ? 'FALLA' : '—'
 
                 return (
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <div className="text-xs text-slate-400">LAB</div>
+                    <div className="rounded-xl border ops-border ops-surface p-3">
+                      <div className="text-xs ops-muted">LAB</div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.front?.lab?.ok)}>Front {label(ps.front?.lab?.ok)}</span>
                         <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.back?.lab?.ok)}>Back {label(ps.back?.lab?.ok)}</span>
-                        <span className="px-2 py-1 rounded-md border text-xs bg-white/5 border-white/10">DB {ps.db?.lab?.name || '—'}</span>
+                        <span className="px-2 py-1 rounded-md border text-xs ops-surface ops-border">DB {ps.db?.lab?.name || '—'}</span>
                       </div>
-                      {ps.front?.lab?.url ? <div className="mt-2 text-xs text-slate-400 font-mono">/__version: {ps.front.lab.url}</div> : null}
+                      {ps.front?.lab?.url ? <div className="mt-2 text-xs ops-muted font-mono">/__version: {ps.front.lab.url}</div> : null}
                     </div>
 
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <div className="text-xs text-slate-400">PROD</div>
+                    <div className="rounded-xl border ops-border ops-surface p-3">
+                      <div className="text-xs ops-muted">PROD</div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.front?.prod?.ok)}>Front {label(ps.front?.prod?.ok)}</span>
                         <span className={"px-2 py-1 rounded-md border text-xs " + pill(ps.back?.prod?.ok)}>Back {label(ps.back?.prod?.ok)}</span>
-                        <span className="px-2 py-1 rounded-md border text-xs bg-white/5 border-white/10">DB {ps.db?.prod?.name || '—'}</span>
+                        <span className="px-2 py-1 rounded-md border text-xs ops-surface ops-border">DB {ps.db?.prod?.name || '—'}</span>
                       </div>
-                      {ps.front?.prod?.url ? <div className="mt-2 text-xs text-slate-400 font-mono">/__version: {ps.front.prod.url}</div> : null}
+                      {ps.front?.prod?.url ? <div className="mt-2 text-xs ops-muted font-mono">/__version: {ps.front.prod.url}</div> : null}
                     </div>
 
                     {projectStatusLoading ? (
-                      <div className="md:col-span-2 text-sm text-slate-400">Cargando estado…</div>
+                      <div className="md:col-span-2 text-sm ops-muted">Cargando estado…</div>
                     ) : null}
                   </div>
                 )
@@ -601,7 +604,7 @@ export default function DashboardPage() {
                 {activeProject.repo_url ? (
                   <a className="underline" href={activeProject.repo_url} target="_blank" rel="noreferrer">{activeProject.repo_url}</a>
                 ) : (
-                  <span className="text-slate-400">—</span>
+                  <span className="ops-muted">—</span>
                 )}
               </div>
             </Card>
@@ -621,62 +624,62 @@ export default function DashboardPage() {
                 <div className="mt-2 space-y-2">
                   {(activeProjectMd.pendientes || []).map((it, i) => (
                     <div key={i} className="text-sm">
-                      <span className="font-mono text-xs text-slate-400">[{it.tag}]</span>{' '}
-                      <span className="text-slate-200">{it.text}</span>
+                      <span className="font-mono text-xs ops-muted">[{it.tag}]</span>{' '}
+                      <span className="ops-text">{it.text}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="mt-2 text-sm text-slate-400">—</div>
+                <div className="mt-2 text-sm ops-muted">—</div>
               )}
             </Card>
 
             <Card className="p-4">
               <div className="text-xs feego-muted">Detalle (por secciones)</div>
-              {activeProjectMdLoading ? <div className="mt-2 text-sm text-slate-400">Cargando .md…</div> : null}
+              {activeProjectMdLoading ? <div className="mt-2 text-sm ops-muted">Cargando .md…</div> : null}
               {activeProjectMd && activeProjectMd.content ? (
                 <div className="mt-3 space-y-2">
                   {parseMdSections(activeProjectMd.content).map((s, i) => (
-                    <details key={i} className="group rounded-xl border border-white/10 bg-white/5">
+                    <details key={i} className="group rounded-xl border ops-border ops-surface">
                       <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
                         <div className="font-bold">{s.title}</div>
-                        <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
-                        <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+                        <div className="text-xs ops-muted group-open:hidden">Abrir</div>
+                        <div className="text-xs ops-muted hidden group-open:block">Cerrar</div>
                       </summary>
                       <div className="px-4 pb-4">
-                        <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
+                        <pre className="text-xs leading-5 p-3 rounded-xl ops-inset border ops-border overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
                       </div>
                     </details>
                   ))}
                 </div>
               ) : (
-                <div className="mt-2 text-sm text-slate-400">—</div>
+                <div className="mt-2 text-sm ops-muted">—</div>
               )}
             </Card>
 
             <Card className="p-4">
               <div className="text-xs feego-muted">Reglas de diseño (repo)</div>
-              <div className="mt-1 text-xs text-slate-400">Fuente: checkout LAB en el VPS (cuando exista).</div>
-              {activeProjectRulesLoading ? <div className="mt-2 text-sm text-slate-400">Cargando reglas…</div> : null}
-              {activeProjectRules && activeProjectRules.path ? <div className="mt-2 text-xs text-slate-400 font-mono">{activeProjectRules.path}</div> : null}
+              <div className="mt-1 text-xs ops-muted">Fuente: checkout LAB en el VPS (cuando exista).</div>
+              {activeProjectRulesLoading ? <div className="mt-2 text-sm ops-muted">Cargando reglas…</div> : null}
+              {activeProjectRules && activeProjectRules.path ? <div className="mt-2 text-xs ops-muted font-mono">{activeProjectRules.path}</div> : null}
 
               {activeProjectRules && activeProjectRules.content ? (
                 <div className="mt-3 space-y-2">
                   {parseMdSections(activeProjectRules.content).map((s, i) => (
-                    <details key={i} className="group rounded-xl border border-white/10 bg-white/5">
+                    <details key={i} className="group rounded-xl border ops-border ops-surface">
                       <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
                         <div className="font-bold">{s.title}</div>
-                        <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
-                        <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+                        <div className="text-xs ops-muted group-open:hidden">Abrir</div>
+                        <div className="text-xs ops-muted hidden group-open:block">Cerrar</div>
                       </summary>
                       <div className="px-4 pb-4">
-                        <pre className="text-xs leading-5 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
+                        <pre className="text-xs leading-5 p-3 rounded-xl ops-inset border ops-border overflow-auto whitespace-pre-wrap">{(s.body || '—').trim()}</pre>
                       </div>
                     </details>
                   ))}
                 </div>
               ) : (
-                <div className="mt-2 text-sm text-slate-400">Por definir.</div>
+                <div className="mt-2 text-sm ops-muted">Por definir.</div>
               )}
             </Card>
           </div>
@@ -686,9 +689,9 @@ export default function DashboardPage() {
 
             <Section title="Actividad">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-slate-300">
+          <div className="text-sm ops-muted">
             Bitácora (chat histórico + comandos OpenClaw). Última actualización:{' '}
-            <span className="font-mono text-xs text-slate-200">
+            <span className="font-mono text-xs ops-text">
               {activitySummary && activitySummary.last_computed_at ? fmtBogota(activitySummary.last_computed_at) : '—'}
             </span>
           </div>
@@ -715,18 +718,18 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-4">
-          {activityLoading ? <div className="text-sm text-slate-400">Cargando actividad…</div> : null}
+          {activityLoading ? <div className="text-sm ops-muted">Cargando actividad…</div> : null}
           {!activityLoading && (!activitySummary || !(activitySummary.days || []).length) ? (
-            <div className="text-sm text-slate-400">—</div>
+            <div className="text-sm ops-muted">—</div>
           ) : null}
 
           {!activityLoading && activitySummary && (activitySummary.days || []).length ? (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+            <div className="rounded-2xl border ops-border ops-surface p-3">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-200 font-bold">
+                <div className="text-sm ops-text font-bold">
                   {monthLabelBogota(activityActiveDate)}
                 </div>
-                <div className="text-xs text-slate-400">Semana inicia: lunes</div>
+                <div className="text-xs ops-muted">Semana inicia: lunes</div>
               </div>
 
               <div className="mt-3">
@@ -799,7 +802,7 @@ export default function DashboardPage() {
             <div className="space-y-4">
               <Card className="p-4">
                 <div className="text-xs feego-muted">Resumen</div>
-                <div className="mt-2 text-sm text-slate-200">
+                <div className="mt-2 text-sm ops-text">
                   {formatMinutes(activityDay.minutes_total)} · fuente: <span className="font-mono">{activityDay.source}</span>
                 </div>
               </Card>
@@ -823,12 +826,12 @@ export default function DashboardPage() {
                     .map(([k, v]) => {
                       const pct = activityDay.minutes_total ? Math.round((v / activityDay.minutes_total) * 100) : 0
                       return (
-                        <div key={k} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-white/5 border border-white/10">
+                        <div key={k} className="flex items-center justify-between gap-3 p-2 rounded-lg ops-surface border ops-border">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-2.5 h-2.5 rounded-full border border-white/10" style={{ background: (Object.fromEntries((infraProjects || []).map((p) => [p.slug, p.color_hex || null]).filter(([,c]) => c))[k] || makeHashColor(k)) }} />
+                            <span className="w-2.5 h-2.5 rounded-full border ops-border" style={{ background: (Object.fromEntries((infraProjects || []).map((p) => [p.slug, p.color_hex || null]).filter(([,c]) => c))[k] || makeHashColor(k)) }} />
                             <div className="font-mono text-sm truncate">{k}</div>
                           </div>
-                          <div className="text-xs text-slate-200">{pct}% · {formatMinutes(v)}</div>
+                          <div className="text-xs ops-text">{pct}% · {formatMinutes(v)}</div>
                         </div>
                       )
                     })}
@@ -841,15 +844,15 @@ export default function DashboardPage() {
       </Section>
 
 <Section title="Contexto (VPS / Proyectos)">
-        <div className="text-sm text-slate-300">
+        <div className="text-sm ops-muted">
           Edita los documentos de contexto del VPS por archivo (sin mezclar todo en uno).
         </div>
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="p-3 rounded-xl border border-white/10 bg-white/5">
+          <div className="p-3 rounded-xl border ops-border ops-surface">
             <div className="text-xs feego-muted">Archivos</div>
             <div className="mt-2 space-y-1">
-              {(ctxFiles || []).length === 0 ? <div className="text-xs text-slate-400">(vacío)</div> : null}
+              {(ctxFiles || []).length === 0 ? <div className="text-xs ops-muted">(vacío)</div> : null}
               {(ctxFiles || []).map((f) => (
                 <button
                   key={f.key}
@@ -871,21 +874,21 @@ export default function DashboardPage() {
                   }}
                   className={
                     'w-full text-left px-3 py-2 rounded-lg border transition-colors ' +
-                    (ctxKey === f.key ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-white/10 bg-black/20 hover:bg-white/5')
+                    (ctxKey === f.key ? 'border-emerald-500/30 bg-emerald-500/10' : 'ops-border ops-inset hover:ops-surface')
                   }
                 >
                   <div className="text-sm font-bold">{f.label}</div>
-                  <div className="text-[11px] text-slate-400 font-mono">{f.rel}</div>
+                  <div className="text-[11px] ops-muted font-mono">{f.rel}</div>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="md:col-span-2 p-3 rounded-xl border border-white/10 bg-white/5">
+          <div className="md:col-span-2 p-3 rounded-xl border ops-border ops-surface">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-xs feego-muted">Editor</div>
-                <div className="text-[11px] text-slate-400">
+                <div className="text-[11px] ops-muted">
                   {ctxMeta ? (
                     <span className="font-mono">{ctxMeta.path}</span>
                   ) : (
@@ -896,7 +899,7 @@ export default function DashboardPage() {
 
               <div className="flex flex-wrap gap-2 items-center">
                 <button
-                  className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
+                  className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10"
                   onClick={async () => {
                     try {
                       setErr(null)
@@ -942,7 +945,7 @@ export default function DashboardPage() {
                   {ctxSaving ? 'Guardando…' : 'Guardar'}
                 </button>
 
-                <div className="text-[11px] text-slate-400">
+                <div className="text-[11px] ops-muted">
                   {ctxDirty ? 'cambios sin guardar' : 'ok'}
                   {ctxMeta ? ' · ' + bytesHuman(ctxMeta.size) : ''}
                 </div>
@@ -956,7 +959,7 @@ export default function DashboardPage() {
                   setCtxText(e.target.value)
                   setCtxDirty(true)
                 }}
-                className="w-full min-h-[42vh] p-3 rounded-xl bg-black/30 border border-white/10 font-mono text-xs leading-5"
+                className="w-full min-h-[42vh] p-3 rounded-xl ops-inset border ops-border font-mono text-xs leading-5"
                 placeholder="Selecciona un archivo a la izquierda…"
                 spellCheck={false}
               />
@@ -968,9 +971,9 @@ export default function DashboardPage() {
       <Section title="Servicios">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {(ov?.services || []).map((s) => (
-            <div key={s.name} className="flex items-center justify-between p-3 rounded-xl border border-white/10 bg-white/5">
+            <div key={s.name} className="flex items-center justify-between p-3 rounded-xl border ops-border ops-surface">
               <div className="font-mono text-sm">{s.name}</div>
-              <div className={`text-sm font-semibold ${s.active === 'active' ? 'text-emerald-300' : 'text-amber-300'}`}>{s.active}</div>
+              <div className={`text-sm font-semibold ${s.active === 'active' ? 'ops-success' : 'text-amber-300'}`}>{s.active}</div>
             </div>
           ))}
         </div>
@@ -999,24 +1002,24 @@ export default function DashboardPage() {
 
       <Section title="SSL (Let’s Encrypt)">
         <div className="space-y-2">
-          {(ov?.certs || []).length === 0 ? <div className="text-sm text-slate-400">No hay certificados detectados.</div> : null}
+          {(ov?.certs || []).length === 0 ? <div className="text-sm ops-muted">No hay certificados detectados.</div> : null}
           {(ov?.certs || []).map((c) => (
-            <div key={c.domain} className="flex items-center justify-between p-3 rounded-xl border border-white/10 bg-white/5">
+            <div key={c.domain} className="flex items-center justify-between p-3 rounded-xl border ops-border ops-surface">
               <div className="font-mono text-sm">{c.domain}</div>
-              <div className="text-xs text-slate-300">{c.notAfter}</div>
+              <div className="text-xs ops-muted">{c.notAfter}</div>
             </div>
           ))}
         </div>
       </Section>
 
       <Section title="VPS.md (runbook)">
-        <div className="text-sm text-slate-300">
+        <div className="text-sm ops-muted">
           Editor estructurado (acordeones por proyecto). Al guardar, se re-genera el bloque de <span className="font-mono">Status de migraciones</span> en el Markdown.
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
+            className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10"
             onClick={async () => {
               try {
                 setErr(null)
@@ -1079,7 +1082,7 @@ export default function DashboardPage() {
           </button>
 
           {vpsMeta ? (
-            <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2">
+            <div className="text-xs ops-muted flex flex-wrap items-center gap-2">
               <span className="font-mono">{vpsMeta.path}</span>
               <span>·</span>
               <span>{bytesHuman(vpsMeta.size)}</span>
@@ -1092,11 +1095,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-4 space-y-3">
-          <div className="p-4 rounded-xl border border-white/10 bg-white/5">
+          <div className="p-4 rounded-xl border ops-border ops-surface">
             <div className="text-xs feego-muted">MAKO (URLs)</div>
             <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <div className="text-xs text-slate-400">LAB URL</div>
+                <div className="text-xs ops-muted">LAB URL</div>
                 <input
                   value={vpsModel?.migrated?.makoLabUrl || ''}
                   onChange={(e) => {
@@ -1104,11 +1107,11 @@ export default function DashboardPage() {
                     setVpsModel((m) => ({ ...m, migrated: { ...m.migrated, makoLabUrl: v } }))
                     setVpsDirty(true)
                   }}
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono"
+                  className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono"
                 />
               </div>
               <div>
-                <div className="text-xs text-slate-400">PROD URL</div>
+                <div className="text-xs ops-muted">PROD URL</div>
                 <input
                   value={vpsModel?.migrated?.makoProdUrl || ''}
                   onChange={(e) => {
@@ -1116,115 +1119,115 @@ export default function DashboardPage() {
                     setVpsModel((m) => ({ ...m, migrated: { ...m.migrated, makoProdUrl: v } }))
                     setVpsDirty(true)
                   }}
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono"
+                  className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono"
                 />
               </div>
             </div>
           </div>
 
-          <details className="group p-4 rounded-xl border border-white/10 bg-white/5">
+          <details className="group p-4 rounded-xl border ops-border ops-surface">
             <summary className="cursor-pointer select-none flex items-center justify-between">
               <div>
                 <div className="font-bold">Mievento</div>
-                <div className="text-xs text-slate-400">LAB backend/puerto + proxy PROD</div>
+                <div className="text-xs ops-muted">LAB backend/puerto + proxy PROD</div>
               </div>
-              <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
-              <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+              <div className="text-xs ops-muted group-open:hidden">Abrir</div>
+              <div className="text-xs ops-muted hidden group-open:block">Cerrar</div>
             </summary>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <div className="text-xs text-slate-400">LAB backend</div>
-                <input value={vpsModel?.mievento?.labBackendName || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, labBackendName:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">LAB backend</div>
+                <input value={vpsModel?.mievento?.labBackendName || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, labBackendName:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">LAB puerto</div>
-                <input value={vpsModel?.mievento?.labPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, labPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">LAB puerto</div>
+                <input value={vpsModel?.mievento?.labPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, labPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div className="md:col-span-2">
-                <div className="text-xs text-slate-400">PROD proxy URL</div>
-                <input value={vpsModel?.mievento?.prodProxyUrl || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, prodProxyUrl:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">PROD proxy URL</div>
+                <input value={vpsModel?.mievento?.prodProxyUrl || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mievento:{...m.mievento, prodProxyUrl:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
             </div>
           </details>
 
-          <details className="group p-4 rounded-xl border border-white/10 bg-white/5">
+          <details className="group p-4 rounded-xl border ops-border ops-surface">
             <summary className="cursor-pointer select-none flex items-center justify-between">
               <div>
                 <div className="font-bold">SISPROIND</div>
-                <div className="text-xs text-slate-400">Puertos, DB y data roots</div>
+                <div className="text-xs ops-muted">Puertos, DB y data roots</div>
               </div>
-              <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
-              <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+              <div className="text-xs ops-muted group-open:hidden">Abrir</div>
+              <div className="text-xs ops-muted hidden group-open:block">Cerrar</div>
             </summary>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <div className="text-xs text-slate-400">PROD puerto</div>
-                <input value={vpsModel?.sisproind?.prodPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">PROD puerto</div>
+                <input value={vpsModel?.sisproind?.prodPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">PROD DB</div>
-                <input value={vpsModel?.sisproind?.prodDb || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodDb:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">PROD DB</div>
+                <input value={vpsModel?.sisproind?.prodDb || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodDb:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div className="md:col-span-2">
-                <div className="text-xs text-slate-400">PROD data root</div>
-                <input value={vpsModel?.sisproind?.prodDataRoot || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodDataRoot:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">PROD data root</div>
+                <input value={vpsModel?.sisproind?.prodDataRoot || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, prodDataRoot:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">LAB puerto</div>
-                <input value={vpsModel?.sisproind?.labPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">LAB puerto</div>
+                <input value={vpsModel?.sisproind?.labPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">LAB DB</div>
-                <input value={vpsModel?.sisproind?.labDb || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labDb:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">LAB DB</div>
+                <input value={vpsModel?.sisproind?.labDb || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labDb:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div className="md:col-span-2">
-                <div className="text-xs text-slate-400">LAB data root</div>
-                <input value={vpsModel?.sisproind?.labDataRoot || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labDataRoot:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">LAB data root</div>
+                <input value={vpsModel?.sisproind?.labDataRoot || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, sisproind:{...m.sisproind, labDataRoot:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
             </div>
           </details>
 
-          <details className="group p-4 rounded-xl border border-white/10 bg-white/5">
+          <details className="group p-4 rounded-xl border ops-border ops-surface">
             <summary className="cursor-pointer select-none flex items-center justify-between">
               <div>
                 <div className="font-bold">MAKO (puertos + nota)</div>
-                <div className="text-xs text-slate-400">Backend/front + texto de nota</div>
+                <div className="text-xs ops-muted">Backend/front + texto de nota</div>
               </div>
-              <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
-              <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+              <div className="text-xs ops-muted group-open:hidden">Abrir</div>
+              <div className="text-xs ops-muted hidden group-open:block">Cerrar</div>
             </summary>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <div className="text-xs text-slate-400">Backend LAB puerto</div>
-                <input value={vpsModel?.mako?.backendLabPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, backendLabPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">Backend LAB puerto</div>
+                <input value={vpsModel?.mako?.backendLabPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, backendLabPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">Backend PROD puerto</div>
-                <input value={vpsModel?.mako?.backendProdPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, backendProdPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">Backend PROD puerto</div>
+                <input value={vpsModel?.mako?.backendProdPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, backendProdPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">Front LAB puerto</div>
-                <input value={vpsModel?.mako?.frontLabPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, frontLabPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">Front LAB puerto</div>
+                <input value={vpsModel?.mako?.frontLabPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, frontLabPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">Front PROD puerto</div>
-                <input value={vpsModel?.mako?.frontProdPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, frontProdPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm font-mono" />
+                <div className="text-xs ops-muted">Front PROD puerto</div>
+                <input value={vpsModel?.mako?.frontProdPort || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, frontProdPort:v}})); setVpsDirty(true)}} className="mt-1 w-full px-3 py-2 rounded-lg border ops-border ops-inset text-sm font-mono" />
               </div>
               <div className="md:col-span-2">
-                <div className="text-xs text-slate-400">Nota</div>
-                <textarea value={vpsModel?.mako?.notes || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, notes:v}})); setVpsDirty(true)}} className="mt-1 w-full min-h-[90px] px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-sm" />
+                <div className="text-xs ops-muted">Nota</div>
+                <textarea value={vpsModel?.mako?.notes || ''} onChange={(e)=>{const v=e.target.value; setVpsModel(m=>({...m, mako:{...m.mako, notes:v}})); setVpsDirty(true)}} className="mt-1 w-full min-h-[90px] px-3 py-2 rounded-lg border ops-border ops-inset text-sm" />
               </div>
             </div>
           </details>
 
-          <details className="group p-4 rounded-xl border border-white/10 bg-white/5">
+          <details className="group p-4 rounded-xl border ops-border ops-surface">
             <summary className="cursor-pointer select-none flex items-center justify-between">
               <div>
                 <div className="font-bold">Raw Markdown</div>
-                <div className="text-xs text-slate-400">Vista previa del archivo</div>
+                <div className="text-xs ops-muted">Vista previa del archivo</div>
               </div>
-              <div className="text-xs text-slate-400 group-open:hidden">Abrir</div>
-              <div className="text-xs text-slate-400 hidden group-open:block">Cerrar</div>
+              <div className="text-xs ops-muted group-open:hidden">Abrir</div>
+              <div className="text-xs ops-muted hidden group-open:block">Cerrar</div>
             </summary>
             <div className="mt-3">
               <Pre text={vpsText || '—'} />

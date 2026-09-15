@@ -1,6 +1,10 @@
 import React from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Eye, FileText, Link2, Pencil, Plus, Share2, X } from 'lucide-react'
+import { Eye, FileText, Link2, Pencil, Plus, Share2, X, Settings, Search, RefreshCw, Download, CalendarDays, Package, Users, ArrowUpDown } from 'lucide-react'
+
+import QuoteSettingsDialog from '../components/QuoteSettingsDialog.jsx'
+import { Button, Input } from '../components/ui'
+import './QuotesPage.scss'
 
 function cls(...a){ return a.filter(Boolean).join(' ') }
 
@@ -438,8 +442,8 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
 
   return (
       <div>
-      <div className="text-2xl leading-8 font-bold">{isEdit ? 'Editar cotización' : 'Nueva cotización'}</div>
-      <div className="mt-2 text-sm leading-5 text-slate-400">Guarda la cotización y gestiona su PDF desde la lista.</div>
+      <div className="quote-form-heading"><span className="quote-document-icon"><FileText size={23} /></span><div><Dialog.Title>{isEdit ? 'Editar cotización' : 'Nueva cotización'}</Dialog.Title><Dialog.Description>Datos del cliente y productos de la propuesta.</Dialog.Description></div><button type="button" onClick={onClose} aria-label="Cerrar cotización"><X size={20} /></button></div>
+
 
       {msg && <div className="mt-4 text-sm text-slate-200">{msg}</div>}
 
@@ -463,7 +467,8 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
         <div className="font-bold">Items</div>
         <div className="mt-4 space-y-4">
           {items.map((it, i) => (
-            <div key={i} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div key={i} className="quote-form-product">
+              <h3>Producto {i + 1}</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2">
                   <div className="text-sm leading-5 text-slate-400">Producto</div>
@@ -570,7 +575,7 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
           ))}
         </div>
 
-        <div className="mt-4 flex gap-4 items-center">
+        <div className="quote-form-totals">
           <button onClick={()=>setItems(prev=>[...prev, makeEmptyItem()])} className="px-4 py-2 rounded-xl border border-white/10 transition-all duration-200 ease-out hover:bg-white/5 text-sm font-bold">+ Agregar item</button>
           <label className="ml-auto inline-flex items-center gap-2 text-sm text-slate-300">
             <input
@@ -585,7 +590,7 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
         </div>
       </div>
 
-      <div className="mt-6 flex gap-4 justify-end">
+      <div className="quote-form-footer">
         <button onClick={onClose} className="px-4 py-2 rounded-xl border border-white/10 transition-all duration-200 ease-out hover:bg-white/5 text-sm font-bold">Cancelar</button>
         <button
           onClick={create}
@@ -600,6 +605,11 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
 }
 
 export default function QuotesPage() {
+  const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [query, setQuery] = React.useState('')
+  const [sort, setSort] = React.useState('newest')
+  const [loading, setLoading] = React.useState(true)
+  const [loadError, setLoadError] = React.useState('')
   const [list, setList] = React.useState([])
   const [open, setOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
@@ -617,11 +627,19 @@ export default function QuotesPage() {
   }
 
   async function refresh(){
-    const r = await j('/api/quotes')
-    setList(r.items || [])
+    setLoading(true); setLoadError('')
+    try { const r = await j('/api/quotes'); setList(r.items || []) }
+    catch { setLoadError('No se pudieron cargar las cotizaciones. Intenta refrescar.') }
+    finally { setLoading(false) }
   }
 
   React.useEffect(()=>{ refresh().catch(()=>{}) },[])
+
+  const quoteDate = q => String(q.date || q.createdAt || '').slice(0, 10)
+  const displayDate = q => { const d = quoteDate(q); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('/') : 'Sin fecha' }
+  const visibleQuotes = [...list].filter(q => `${q.customer || ''} ${(q.items || []).map(i => i.name).join(' ')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort((a,b) => sort === 'customer' ? String(a.customer || '').localeCompare(String(b.customer || ''), 'es') : sort === 'oldest' ? quoteDate(a).localeCompare(quoteDate(b)) : quoteDate(b).localeCompare(quoteDate(a)))
+  const customers = new Set(list.map(q => String(q.customer || '').trim().toLocaleLowerCase()).filter(Boolean)).size
+  const totalFor = q => (q.items || []).reduce((sum, i) => sum + Number(i.qty || 0) * Number(i.unitPrice || 0), 0).toLocaleString('es-CO', { maximumFractionDigits: 2 })
 
   async function shareQuotePdf(quote) {
     if (!quote?.id) return
@@ -662,24 +680,25 @@ export default function QuotesPage() {
   }
 
   return (
-    <div className="px-4 md:px-6 lg:px-8 2xl:px-12 py-4 md:py-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-end justify-between gap-4 md:gap-6 flex-wrap">
+    <div className="quotes-page">
+      <div>
+        <header className="quotes-header">
           <div>
-            <div className="text-[32px] leading-[40px] font-bold">Cotizaciones</div>
-            <div className="text-sm leading-5 text-slate-400">Lista, creación rápida y gestión de PDF.</div>
+            <div className="quotes-eyebrow">GESTIÓN COMERCIAL</div><h1>Cotizaciones</h1><p>Propuestas, productos y documentos.</p>
           </div>
 
+          <div className="quotes-header-actions">
+          <Button type="button" variant="outline" aria-label="Refrescar cotizaciones" title="Refrescar" disabled={loading} onClick={refresh}><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></Button>
+          <Button type="button" variant="outline" aria-label="Configuración de cotizaciones" title="Configuración de cotizaciones" onClick={() => setSettingsOpen(true)}><Settings size={19} /></Button>
+          <QuoteSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
           <Dialog.Root open={open} onOpenChange={setOpen}>
             <Dialog.Trigger asChild>
-              <button className="px-4 py-2 rounded-xl font-bold text-sm bg-indigo-500 hover:bg-indigo-400 text-white transition-all duration-200 ease-out">
-                + Nueva cotización
-              </button>
+              <Button><Plus size={18} />Nueva cotización</Button>
             </Dialog.Trigger>
 
             <Dialog.Portal>
-              <Dialog.Overlay className="feego-overlay fixed inset-0" />
-              <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 w-[95vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-2xl p-4 md:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <Dialog.Overlay className="feego-overlay fixed inset-0 z-[70]" />
+              <Dialog.Content className="feego-modal quote-form-dialog z-[71] fixed left-1/2 top-1/2 w-[95vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-2xl p-4 md:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
                 <NewQuoteForm
                   onSaved={async ()=>{ await refresh().catch(()=>{}); }}
                   onClose={()=>setOpen(false)}
@@ -687,11 +706,12 @@ export default function QuotesPage() {
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
+          </div>
 
           <Dialog.Root open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingQuote(null) }}>
             <Dialog.Portal>
-              <Dialog.Overlay className="feego-overlay fixed inset-0" />
-              <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 w-[95vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-2xl p-4 md:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <Dialog.Overlay className="feego-overlay fixed inset-0 z-[70]" />
+              <Dialog.Content className="feego-modal quote-form-dialog z-[71] fixed left-1/2 top-1/2 w-[95vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-2xl p-4 md:p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
                 <NewQuoteForm
                   initialQuote={editingQuote}
                   onSaved={async ()=>{ await refresh().catch(()=>{}); }}
@@ -700,57 +720,31 @@ export default function QuotesPage() {
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
-        </div>
+        </header>
 
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 md:p-6">
-          <div className="text-xl leading-8 font-bold">Cotizaciones recientes</div>
-          <div className="mt-2 text-sm leading-5 text-slate-400">Abre, descarga o comparte el PDF de cada cotización.</div>
-          <div className="mt-4 space-y-4">
-            {list.map(q => (
-              <div key={q.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-xl leading-8 font-bold">{q.customer}</div>
-                    <div className="text-sm leading-5 text-slate-400">{q.date || q.createdAt?.slice(0,10)} • {q.items?.length || 0} items</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      className="w-10 h-10 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white inline-flex items-center justify-center transition-all duration-200 ease-out"
-                      href={`/api/quotes/${q.id}/pdf?download=1`}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Descargar PDF"
-                    >
-                      <FileText className="w-5 h-5" />
-                    </a>
-                    <button
-                      className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold inline-flex items-center gap-2"
-                      onClick={() => { setShareMsg(''); setPreviewQuote(q) }}
-                    >
-                      <Eye className="w-4 h-4" />
-                      Vista previa
-                    </button>
-                    <button
-                      className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold inline-flex items-center gap-2"
-                      onClick={() => { setEditingQuote(q); setEditOpen(true) }}
-                    >
-                      <Pencil className="w-4 h-4" />
-                      Editar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {!list.length && <div className="text-sm leading-5 text-slate-400">Aún no hay cotizaciones.</div>}
-          </div>
-        </div>
+        <div className="quotes-summary"><div><FileText size={19} /><strong>{list.length}</strong><span>Cotizaciones</span></div><div><Users size={19} /><strong>{customers}</strong><span>{customers === 1 ? 'Cliente' : 'Clientes'}</span></div><span className="quotes-summary-note">Hasta 200 cotizaciones recientes</span></div>
+        <section className="quotes-list" aria-label="Listado de cotizaciones">
+          <div className="quotes-list-toolbar"><h2>Cotizaciones recientes <span>{visibleQuotes.length}</span></h2><div className="quotes-filters"><label className="quotes-search"><Search size={17} /><Input aria-label="Buscar cotización" placeholder="Buscar cliente o producto" value={query} onChange={e => setQuery(e.target.value)} /></label><label className="quotes-sort"><ArrowUpDown size={16} /><select aria-label="Ordenar cotizaciones" value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Más recientes</option><option value="oldest">Más antiguas</option><option value="customer">Cliente A–Z</option></select></label></div></div>
+          {loadError && <div role="alert" className="quotes-error">{loadError}<Button variant="outline" onClick={refresh}>Reintentar</Button></div>}
+          {loading && !list.length ? <div className="quotes-empty" role="status"><RefreshCw size={24} className="animate-spin" />Cargando cotizaciones…</div> : <>
+            <div className="quotes-table-heading" aria-hidden="true"><span>Cliente</span><span>Fecha</span><span>Productos</span><span>Total</span><span>Acciones</span></div>
+            {visibleQuotes.map(q => <article key={q.id} className="quote-row">
+              <div className="quote-customer"><span className="quote-document-icon"><FileText size={22} /></span><div><button onClick={() => { setShareMsg(''); setPreviewQuote(q) }}>{q.customer || 'Sin cliente'}</button><span>Cotización · PDF</span></div></div>
+              <div className="quote-date"><CalendarDays size={15} /><time dateTime={quoteDate(q) || undefined}>{displayDate(q)}</time></div>
+              <div className="quote-products"><Package size={15} /><span>{q.items?.length || 0} <span className="quote-mobile-label">productos</span></span></div>
+              <div className="quote-total"><small className="quote-mobile-label">Total</small>{q.totalize === false ? <span className="quote-no-total">Sin totalizar</span> : <strong>{totalFor(q)}</strong>}</div>
+              <div className="quote-actions"><Button variant="outline" title="Vista previa" aria-label={`Vista previa de ${q.customer}`} onClick={() => { setShareMsg(''); setPreviewQuote(q) }}><Eye size={17} /></Button><Button variant="ghost" title="Editar" aria-label={`Editar cotización de ${q.customer}`} onClick={() => { setEditingQuote(q); setEditOpen(true) }}><Pencil size={17} /></Button><a className="quote-download" href={`/api/quotes/${q.id}/pdf?download=1`} target="_blank" rel="noreferrer" title="Descargar PDF" aria-label={`Descargar PDF de ${q.customer}`}><Download size={17} /></a></div>
+            </article>)}
+            {!visibleQuotes.length && <div className="quotes-empty"><FileText size={30} /><h3>{query ? 'Sin coincidencias' : 'Tu primera cotización empieza aquí'}</h3><p>{query ? 'Prueba con otro cliente o producto.' : 'Crea una propuesta y consulta su PDF en este listado.'}</p><Button variant="outline" onClick={() => query ? setQuery('') : setOpen(true)}>{query ? 'Limpiar búsqueda' : 'Crear cotización'}</Button></div>}
+          </>}
+        </section>
       </div>
 
       <Dialog.Root open={Boolean(previewQuote)} onOpenChange={(o) => { if (!o) { setPreviewQuote(null); setShareMsg('') } }}>
         <Dialog.Portal>
-          <Dialog.Overlay className="feego-overlay fixed inset-0" />
-          <Dialog.Content className="feego-modal fixed left-1/2 top-1/2 w-[96vw] max-w-6xl h-[88vh] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-4 shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between gap-3">
+          <Dialog.Overlay className="feego-overlay fixed inset-0 z-[70]" />
+          <Dialog.Content className="feego-modal quote-preview-dialog z-[71] fixed left-1/2 top-1/2 w-[96vw] max-w-6xl h-[88vh] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-4 shadow-2xl flex flex-col">
+            <div className="quote-preview-header">
               <div>
                 <Dialog.Title className="text-lg font-bold">Vista previa PDF</Dialog.Title>
                 <div className="text-sm text-slate-400">{previewQuote?.customer || ''}</div>
@@ -772,6 +766,7 @@ export default function QuotesPage() {
                   <Share2 className="w-4 h-4" />
                   Compartir
                 </button>
+                <Dialog.Close asChild><Button variant="ghost" aria-label="Cerrar vista previa"><X size={19} /></Button></Dialog.Close>
               </div>
             </div>
 

@@ -9,11 +9,13 @@ export default function LoginPage() {
   const { user, login, refresh } = useAuth()
   const nav = useNavigate()
   const loc = useLocation()
-  const from = loc.state?.from || '/dashboard'
+  const from = loc.state?.from || '/roadmap'
 
   const [username, setUsername] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [msg, setMsg] = React.useState('')
+  const [showPassword, setShowPassword] = React.useState(false)
+  const [submitting, setSubmitting] = React.useState(false)
 
   const [mustChange, setMustChange] = React.useState(false)
   const [newPassword, setNewPassword] = React.useState('')
@@ -27,15 +29,27 @@ export default function LoginPage() {
 
   async function onSubmit(e) {
     e.preventDefault()
+    if (submitting) return
     setMsg('')
-    const r = await login(username.trim(), password)
-    if (!r.ok) {
-      setMsg('Usuario o clave incorrectos')
-      return
-    }
-    if (r.data?.mustChange) {
-      setMustChange(true)
-      setMsg('Estás usando una contraseña temporal. Debes cambiarla.')
+    setSubmitting(true)
+    try {
+      const r = await login(username.trim(), password)
+      if (!r.ok) {
+        setMsg(r.status === 401
+          ? 'Usuario o contraseña incorrectos. Pulsa Mostrar para revisar la contraseña.'
+          : r.status === 400
+            ? 'Escribe el usuario y la contraseña.'
+            : 'El servidor no pudo iniciar sesión. Intenta de nuevo en unos momentos.')
+        return
+      }
+      if (r.data?.mustChange) {
+        setMustChange(true)
+        setMsg('Estás usando una contraseña temporal. Debes cambiarla.')
+      }
+    } catch {
+      setMsg('No se pudo conectar con el servidor. Revisa tu conexión Wi-Fi e intenta de nuevo.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -82,10 +96,16 @@ export default function LoginPage() {
 
           {!mustChange ? (
             <form ref={formRef} onSubmit={onSubmit} className="mt-4 space-y-3">
-              <Input placeholder="Usuario" value={username} onChange={(e) => setUsername(e.target.value)} onKeyDown={onEnterSubmit} />
-              <Input placeholder="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onEnterSubmit} />
-              {msg && <div className="text-sm text-red-600">{msg}</div>}
-              <Button className="w-full" type="submit">Entrar</Button>
+              <Input name="username" aria-label="Usuario" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Usuario" value={username} onChange={(e) => setUsername(e.target.value)} onKeyDown={onEnterSubmit} required />
+              <div className="relative">
+                <Input id="login-password" name="password" aria-label="Contraseña" autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} className="pr-24" placeholder="Contraseña" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onEnterSubmit} required />
+                <Button variant="ghost" type="button" className="absolute inset-y-0 right-0" aria-controls="login-password" aria-pressed={showPassword} aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} onClick={() => setShowPassword((visible) => !visible)}>
+                  {showPassword ? 'Ocultar' : 'Mostrar'}
+                </Button>
+              </div>
+              {password !== password.trim() && <div className="text-sm text-red-600" role="status">La contraseña tiene espacios al principio o al final. Revisa si se añadieron al copiarla.</div>}
+              {msg && <div className="text-sm text-red-600" role="alert">{msg}</div>}
+              <Button className="w-full" type="submit" disabled={submitting}>{submitting ? 'Entrando…' : 'Entrar'}</Button>
             </form>
           ) : (
             <form onSubmit={onChangePassword} className="mt-4 space-y-3">

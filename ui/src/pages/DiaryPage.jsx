@@ -1,11 +1,14 @@
 import React from 'react'
+import { NotebookPen, CalendarDays, RefreshCw } from 'lucide-react'
+import OperationsHeader from '../components/OperationsHeader'
+import './AdminPages.scss'
 import Holidays from 'date-holidays'
 import Calendar from 'react-calendar'
 import '../styles/calendar-min.css'
 import { api } from '../lib/api.js'
 
 function Card({ className = '', children }) {
-  return <div className={`rounded-2xl border border-white/10 bg-white/5 ${className}`}>{children}</div>
+  return <div className={`rounded-2xl border ops-border ops-surface ${className}`}>{children}</div>
 }
 
 function Modal({ open, title, onClose, children }) {
@@ -13,11 +16,11 @@ function Modal({ open, title, onClose, children }) {
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/60" onClick={onClose} />
-      <div className="fixed z-50 inset-0 grid place-items-center p-4">
-        <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-950/95 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-4 p-4 border-b border-white/10">
-            <div className="text-xl font-bold text-slate-100">{title}</div>
-            <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10" onClick={onClose}>Cerrar</button>
+      <div className="fixed z-50 inset-0 grid place-items-center p-4" onClick={onClose}>
+        <div className="diary-day-dialog w-full max-w-3xl rounded-2xl border ops-border ops-surface" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
+          <div className="flex items-center justify-between gap-4 p-4 border-b ops-border">
+            <div className="text-xl font-bold ops-text">{title}</div>
+            <button className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10" onClick={onClose}>Cerrar</button>
           </div>
           <div className="p-4">{children}</div>
         </div>
@@ -203,30 +206,27 @@ export default function DiaryPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="text-[32px] leading-[40px] font-bold">Diario</div>
-        <div className="text-sm leading-5 text-slate-400">Resumen diario por fecha (texto). Fuente: entradas guardadas en BD.</div>
-      </div>
+    <div className="ops-page diary-page space-y-6">
+      <OperationsHeader icon={NotebookPen} eyebrow="REGISTRO DE ACTIVIDAD" title="Diario" description="Resumen del día, metas y seguimiento." />
 
-      <Card className="p-3">
+      <Card className="diary-calendar-panel p-4 md:p-6">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm text-slate-200 font-bold">{monthLabelBogota(activeDate)}</div>
+          <div className="ops-section-label"><CalendarDays size={18} />{monthLabelBogota(activeDate)}</div>
           <div className="flex items-center gap-2">
-            <div className="text-xs text-slate-400">Click en un día para ver el resumen</div>
+            <div className="text-xs ops-muted">Selecciona un día</div>
             <button
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs"
+              className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10 text-xs"
               onClick={async () => { await loadSummary() }}
               disabled={loading}
               title="Actualizar la vista del calendario"
             >
-              {loading ? "Actualizando…" : "Refrescar calendario"}
+              <RefreshCw size={15} />{loading ? "Actualizando…" : "Actualizar"}
             </button>
           </div>
         </div>
 
         <div className="mt-3">
-          {loading ? <div className="text-sm text-slate-400 p-3">Cargando…</div> : null}
+          {loading ? <div className="text-sm ops-muted p-3">Cargando…</div> : null}
           <Calendar
             className="feego-calendar"
             value={activeDate}
@@ -286,9 +286,9 @@ export default function DiaryPage() {
           />
         </div>
 
-        <div className="mt-4 border-t border-white/10 pt-4">
+        <div className="mt-4 border-t ops-border pt-4">
           <button
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10"
+            className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10"
             onClick={async () => {
               if (!recentExpanded) {
                 try {
@@ -307,14 +307,14 @@ export default function DiaryPage() {
 
           {recentExpanded ? (
             <div className="mt-4 space-y-2">
-              {!recent || recent.length === 0 ? <div className="text-sm text-slate-400">—</div> : null}
+              {!recent || recent.length === 0 ? <div className="text-sm ops-muted">—</div> : null}
               {(recent || []).map((e) => (
-                <details key={e.day} className="group rounded-xl border border-white/10 bg-white/5">
+                <details key={e.day} className="group rounded-xl border ops-border ops-surface">
                   <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3">
-                    <div className="font-mono text-sm text-slate-200">{recentLabelBogota(e.day)}</div>
+                    <div className="font-mono text-sm ops-text">{recentLabelBogota(e.day)}</div>
                   </summary>
                   <div className="px-4 pb-4">
-                    <pre className="text-sm leading-6 p-3 rounded-xl bg-black/30 border border-white/10 overflow-auto whitespace-pre-wrap">{(e.summary_md || '—').trim() || '—'}</pre>
+                    <pre className="text-sm leading-6 p-3 rounded-xl ops-inset border ops-border overflow-auto whitespace-pre-wrap">{(e.summary_md || '—').trim() || '—'}</pre>
                   </div>
                 </details>
               ))}
@@ -328,10 +328,10 @@ export default function DiaryPage() {
           <div className="space-y-4">
             <Card className="p-4">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-slate-400">Metas</div>
+                <div className="text-xs ops-muted">Metas</div>
                 <div className="flex items-center gap-2">
                   <input
-                    className="px-3 py-2 rounded-lg border border-white/10 bg-black/30 text-slate-100 text-xs min-w-[220px]"
+                    className="px-3 py-2 rounded-lg border ops-border ops-inset ops-text text-xs min-w-[220px]"
                     placeholder="Agregar meta manual"
                     value={newGoalText}
                     onChange={(e) => setNewGoalText(e.target.value)}
@@ -348,19 +348,19 @@ export default function DiaryPage() {
                   >
                     {creatingGoal ? 'Guardando…' : '+ Agregar meta'}
                   </button>
-                  <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayGoalsFor(dayEntry.day) : null}>
+                  <button className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayGoalsFor(dayEntry.day) : null}>
                     Refrescar
                   </button>
                 </div>
               </div>
 
-              {dayGoalsLoading ? <div className="mt-2 text-sm text-slate-400">Cargando…</div> : null}
-              {!dayGoalsLoading && (!dayGoals || dayGoals.length === 0) ? <div className="mt-2 text-sm text-slate-400">—</div> : null}
+              {dayGoalsLoading ? <div className="mt-2 text-sm ops-muted">Cargando…</div> : null}
+              {!dayGoalsLoading && (!dayGoals || dayGoals.length === 0) ? <div className="mt-2 text-sm ops-muted">—</div> : null}
 
               {dayGoals && dayGoals.length ? (
                 <div className="mt-3 space-y-2">
                   {dayGoals.map((g) => (
-                    <div key={g.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-black/20">
+                    <div key={g.id} className="flex items-center gap-3 p-3 rounded-xl border ops-border ops-inset">
                       <input
                         type="checkbox"
                         className="h-5 w-5 accent-emerald-500"
@@ -370,7 +370,7 @@ export default function DiaryPage() {
 
                       {editingGoalId === g.id ? (
                         <input
-                          className="flex-1 px-3 py-2 rounded-xl border border-white/10 bg-black/30 text-slate-100 text-sm"
+                          className="flex-1 px-3 py-2 rounded-xl border ops-border ops-inset ops-text text-sm"
                           value={editingGoalText}
                           autoFocus
                           onChange={(e) => setEditingGoalText(e.target.value)}
@@ -394,12 +394,12 @@ export default function DiaryPage() {
                           }}
                         />
                       ) : (
-                        <div className={"flex-1 text-sm " + (g.status === 'done' ? 'line-through text-slate-400' : 'text-slate-200')}>{g.text}</div>
+                        <div className={"flex-1 text-sm " + (g.status === 'done' ? 'line-through ops-muted' : 'ops-text')}>{g.text}</div>
                       )}
 
                       <button
                         type="button"
-                        className="shrink-0 w-9 h-9 grid place-items-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10"
+                        className="shrink-0 w-9 h-9 grid place-items-center rounded-xl border ops-border ops-surface hover:bg-white/10"
                         title="Editar"
                         onClick={() => {
                           setEditingGoalId(g.id)
@@ -416,18 +416,18 @@ export default function DiaryPage() {
 
 <Card className="p-4">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-slate-400">Ítems (visual)</div>
-                <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayRowsFor(dayEntry.day) : null}>
+                <div className="text-xs ops-muted">Ítems (visual)</div>
+                <button className="px-3 py-2 rounded-lg border ops-border ops-surface hover:bg-white/10 text-xs" onClick={() => dayEntry?.day ? loadDayRowsFor(dayEntry.day) : null}>
                   Refrescar
                 </button>
               </div>
-              {dayRowsLoading ? <div className="mt-2 text-sm text-slate-400">Cargando…</div> : null}
-              {!dayRowsLoading && (!dayRows || dayRows.length === 0) ? <div className="mt-2 text-sm text-slate-400">—</div> : null}
+              {dayRowsLoading ? <div className="mt-2 text-sm ops-muted">Cargando…</div> : null}
+              {!dayRowsLoading && (!dayRows || dayRows.length === 0) ? <div className="mt-2 text-sm ops-muted">—</div> : null}
 
               {dayRows && dayRows.length ? (
-                <div className="mt-3 overflow-auto rounded-xl border border-white/10">
+                <div className="mt-3 overflow-auto rounded-xl border ops-border">
                   <table className="w-full text-sm">
-                    <thead className="bg-white/5">
+                    <thead className="ops-surface">
                       <tr className="text-left">                        <th className="p-3">Ítem</th>
                         <th className="p-3 w-[180px]">Horas</th>
                         <th className="p-3">Comentario</th>
@@ -436,10 +436,10 @@ export default function DiaryPage() {
                     <tbody>
                       {dayRows.map((r) => {
                         return (
-                          <tr key={r.slug} className="border-t border-white/10">
-                            <td className="p-3 font-medium text-slate-100">{r.name}</td>
-                            <td className="p-3 font-mono text-xs text-slate-300">{r.range || '—'}</td>
-                            <td className="p-3 text-slate-300">{r.comment || '—'}</td>
+                          <tr key={r.slug} className="border-t ops-border">
+                            <td className="p-3 font-medium ops-text">{r.name}</td>
+                            <td className="p-3 font-mono text-xs ops-muted">{r.range || '—'}</td>
+                            <td className="p-3 ops-muted">{r.comment || '—'}</td>
                           </tr>
                         )
                       })}
