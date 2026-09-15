@@ -40,6 +40,21 @@ export default function RoadmapView({ state, loading, error, refresh, onNewProje
   const summary = metrics(projectCards)
   const sections = state.sections.filter(s => String(s.project_id) === selectedId)
   const groups = sectionGroups(projectCards, sections)
+  async function archiveTask(card) {
+    if (busyRef.current.has(card.id) || taskState(card) !== 'done') return
+    busyRef.current.add(card.id)
+    setBusy(b => ({ ...b, [card.id]: true }))
+    try {
+      const r = await api('/api/kanban/move', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: card.id, board: 'archived', status: 'n/a' }),
+      })
+      if (!r.ok || !r.data?.ok) throw new Error('No se pudo archivar la tarea')
+      await refresh()
+      toast.success('Tarea archivada')
+    } catch (e) { toast.error(e.message || 'No se pudo conectar con el servidor') }
+    finally { busyRef.current.delete(card.id); setBusy(b => ({ ...b, [card.id]: false })) }
+  }
   async function sendToKanban(card) {
     if (busyRef.current.has(card.id) || taskState(card) !== 'todo' || (card.board === 'kanban' && card.status === 'todo')) return
     busyRef.current.add(card.id)
@@ -111,6 +126,7 @@ export default function RoadmapView({ state, loading, error, refresh, onNewProje
               <span className="roadmap-task-priority" data-priority={card.priority} title={priority ? `Prioridad ${priority.label.toLowerCase()}` : undefined}>{priority && <priority.Icon size={18} role="img" aria-label={`Prioridad ${priority.label.toLowerCase()}`} />}</span>
               <div className="roadmap-task-progress" aria-label={`Avance de ${card.title}: ${value}%`}><span>{formatProgress(value)}</span><ProgressBar value={value} label={`Progreso de ${card.title}`} /></div>
               <div className="roadmap-task-actions">
+                {taskState(card) === 'done' && <Button variant="outline" aria-label={`Archivar ${card.title}`} title="Archivar tarea" disabled={busy[card.id]} onClick={() => archiveTask(card)}><Icons.Archive size={17} /></Button>}
                 {taskState(card) === 'todo' && <Button variant="outline" aria-label={`${card.board === 'kanban' && card.status === 'todo' ? 'Ya está en Por hacer' : 'Pasar a Por hacer en Kanban'}: ${card.title}`} title={card.board === 'kanban' && card.status === 'todo' ? 'Ya está en Por hacer de Kanban' : 'Pasar a Por hacer en Kanban'} disabled={busy[card.id] || (card.board === 'kanban' && card.status === 'todo')} onClick={() => sendToKanban(card)}><Play size={17} /></Button>}
                 <Button variant="ghost" aria-label={`Editar ${card.title}`} title="Editar tarea" onClick={() => onEditCard(card)}><Pencil size={17} /></Button>
               </div>
