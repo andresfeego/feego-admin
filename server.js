@@ -2840,13 +2840,31 @@ async function hasSectionIdsJsonColumn(conn) {
   }
 }
 
+async function hasCardProgressColumn(conn) {
+  try {
+    const rows = await conn.query("SHOW COLUMNS FROM kb_cards LIKE 'progress_pct'");
+    if (Array.isArray(rows) && rows.length > 0) return true;
+    await conn.query('ALTER TABLE kb_cards ADD COLUMN progress_pct INT NOT NULL DEFAULT 0');
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+function clampProgress(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
 async function getKanbanState(conn) {
   const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
+  const supportsCardProgress = await hasCardProgressColumn(conn);
   const projects = await conn.query('SELECT id, name, sort, description, logo_path FROM kb_projects WHERE archived=0 ORDER BY sort ASC, id ASC');
   const sections = await conn.query('SELECT id, project_id, name, color, icon, sort FROM kb_sections WHERE archived=0 ORDER BY project_id ASC, sort ASC, id ASC');
   const cards = supportsSectionIdsJson
-    ? await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, section_ids_json, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC')
-    : await conn.query('SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, priority, labels_json FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC');
+    ? await conn.query(`SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, section_ids_json, priority, labels_json${supportsCardProgress ? ', progress_pct' : ''}, updated_at FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC`)
+    : await conn.query(`SELECT id, title, notes, project_id, board, status, sort, due_at, section_id, section_name, priority, labels_json${supportsCardProgress ? ', progress_pct' : ''}, updated_at FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC`);
 
   const pmap = { };
   for (const p of projects) pmap[p.id] = p.name;
@@ -2909,6 +2927,8 @@ async function getKanbanState(conn) {
       sections: cardSections.map((s) => ({ id: Number(s.id), name: s.name, color: s.color, icon: s.icon })),
       priority: c.priority == null ? null : Number(c.priority),
       labels: (() => { try { return c.labels_json ? JSON.parse(c.labels_json) : []; } catch { return []; } })(),
+      progress_pct: supportsCardProgress ? clampProgress(c.progress_pct, c.board === 'kanban' && c.status === 'done' ? 100 : 0) : (c.board === 'kanban' && c.status === 'done' ? 100 : 0),
+      updated_at: c.updated_at ? new Date(c.updated_at).toISOString() : null,
     };
   });
 
@@ -3212,10 +3232,12 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
   })();
   const priority = (req.body && req.body.priority != null) ? Number(req.body.priority) : null;
   const labels = (req.body && req.body.labels) ? req.body.labels : [];
+  const progress_pct = clampProgress(req.body && req.body.progress_pct, board === 'kanban' && status === 'done' ? 100 : 0);
   if (!title) return res.status(400).json({ ok: false });
   let conn;
   try {
     conn = await pool.getConnection();
+    const supportsCardProgress = await hasCardProgressColumn(conn);
     let insertSort = 9999;
     if (board === 'ideas') {
       const rows = await conn.query(
@@ -3237,16 +3259,16 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
     const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
     if (supportsSectionIdsJson) {
       await conn.query(
-        'INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_ids_json, due_at, priority, labels_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-        [title, notes, project_id, board, status, insertSort, primarySectionId, JSON.stringify(section_ids), due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : [])]
+        `INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_ids_json, due_at, priority, labels_json${supportsCardProgress ? ', progress_pct' : ''}) VALUES (?,?,?,?,?,?,?,?,?,?,?${supportsCardProgress ? ',?' : ''})`,
+        [title, notes, project_id, board, status, insertSort, primarySectionId, JSON.stringify(section_ids), due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : []), ...(supportsCardProgress ? [progress_pct] : [])]
       );
     } else {
       const namesById = new Map((sectionRows || []).map((r) => [Number(r.id), String(r.name || '')]));
       const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
       const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
       await conn.query(
-        'INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_name, due_at, priority, labels_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-        [title, notes, project_id, board, status, insertSort, primarySectionId, sectionNameSerialized, due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : [])]
+        `INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_name, due_at, priority, labels_json${supportsCardProgress ? ', progress_pct' : ''}) VALUES (?,?,?,?,?,?,?,?,?,?,?${supportsCardProgress ? ',?' : ''})`,
+        [title, notes, project_id, board, status, insertSort, primarySectionId, sectionNameSerialized, due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : []), ...(supportsCardProgress ? [progress_pct] : [])]
       );
     }
     res.json({ ok: true });
@@ -3269,6 +3291,7 @@ app.post('/api/kanban/move', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
+    const supportsCardProgress = await hasCardProgressColumn(conn);
     const fields = ['board=?', 'status=?'];
     const params = [board, status];
     if (project_id !== undefined) { fields.push('project_id=?'); params.push(project_id || null); }
@@ -3280,6 +3303,7 @@ app.post('/api/kanban/move', requireAuth, async (req, res) => {
       }
     }
     if (sort !== undefined) { fields.push('sort=?'); params.push(sort); }
+    if (board === 'kanban' && status === 'done' && supportsCardProgress) { fields.push('progress_pct=?'); params.push(100); }
     params.push(id);
     await conn.query('UPDATE kb_cards SET ' + fields.join(', ') + ' WHERE id=?', params);
     res.json({ ok: true });
@@ -3315,6 +3339,7 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
   })();
   const priority = (req.body && req.body.priority != null) ? Number(req.body.priority) : null;
   const labels = (req.body && req.body.labels) ? req.body.labels : [];
+  const progress_pct = clampProgress(req.body && req.body.progress_pct, 0);
 
   if (!title) return res.status(400).json({ ok: false });
 
@@ -3322,6 +3347,7 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
   try {
     conn = await pool.getConnection();
     const supportsSectionIdsJson = await hasSectionIdsJsonColumn(conn);
+    const supportsCardProgress = await hasCardProgressColumn(conn);
     let sectionRows = [];
     // validate sections belong to project (if provided)
     if (section_ids.length > 0) {
@@ -3336,16 +3362,16 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
     const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
     if (supportsSectionIdsJson) {
       await conn.query(
-        'UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_ids_json=?, due_at=?, priority=?, labels_json=? WHERE id=?',
-        [title, notes, project_id, primarySectionId, JSON.stringify(section_ids), due_at, priority, labels_json, id]
+        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_ids_json=?, due_at=?, priority=?, labels_json=?${supportsCardProgress ? ', progress_pct=?' : ''} WHERE id=?`,
+        [title, notes, project_id, primarySectionId, JSON.stringify(section_ids), due_at, priority, labels_json, ...(supportsCardProgress ? [progress_pct] : []), id]
       );
     } else {
       const namesById = new Map((sectionRows || []).map((r) => [Number(r.id), String(r.name || '')]));
       const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
       const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
       await conn.query(
-        'UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_name=?, due_at=?, priority=?, labels_json=? WHERE id=?',
-        [title, notes, project_id, primarySectionId, sectionNameSerialized, due_at, priority, labels_json, id]
+        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_name=?, due_at=?, priority=?, labels_json=?${supportsCardProgress ? ', progress_pct=?' : ''} WHERE id=?`,
+        [title, notes, project_id, primarySectionId, sectionNameSerialized, due_at, priority, labels_json, ...(supportsCardProgress ? [progress_pct] : []), id]
       );
     }
     res.json({ ok: true });
@@ -3472,4 +3498,5 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log('Feego Admin listening on', PORT));
+const HOST = process.env.HOST || '127.0.0.1';
+app.listen(PORT, HOST, () => console.log('Feego Admin listening on', `${HOST}:${PORT}`));
