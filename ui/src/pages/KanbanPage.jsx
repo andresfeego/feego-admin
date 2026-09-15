@@ -1,3 +1,4 @@
+import TaskWorkTimer from '../components/TaskWorkTimer'
 import React from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Icons from 'lucide-react'
@@ -161,7 +162,7 @@ function CardVisual({ c, handle, onOpen, logoSrc = null, draggingOverlay = false
     {!(c.board === 'kanban' && c.status === 'todo') && <div className="kanban-task-progress"><ProgressBar value={progressValue(c.progress_pct)} label={`Progreso de ${c.title}`} /><strong>{progressValue(c.progress_pct)}%</strong></div>}
     {!!cardSections.length && <div className="kanban-task-sections">{cardSections.map(sec=>{const Icon=Icons[sec.icon] || Icons.Tag;return <span key={sec.id} title={sec.name}><Icon size={13} style={{color:sec.color || undefined}} />{sec.name}</span>})}</div>}
     {!!labels.length && <div className="kanban-task-labels">{labels.slice(0,2).map(label=><span key={label}>{label}</span>)}{labels.length>2 && <span>+{labels.length-2}</span>}</div>}
-    <footer className="kanban-task-footer">{priority && <span className="kanban-task-priority" data-priority={priority.value}><PriorityIcon size={14} />{priority.label}</span>}{due && <span className="kanban-task-due"><Icons.CalendarDays size={13} />{due}</span>}{c.board === 'kanban' && c.status === 'todo' && <button type="button" className="kanban-task-return" title="Devolver a planificación de Roadmap" aria-label={`Devolver ${c.title} a Roadmap`} disabled={actionBusy} onClick={e=>{e.stopPropagation();runAction('toRoadmap')}}><Icons.Undo2 size={17} /></button>}{c.status === 'done' && <button type="button" className="kanban-task-archive" title="Archivar tarea" aria-label={`Archivar ${c.title}`} disabled={actionBusy} onClick={e=>{e.stopPropagation();runAction('archive')}}><Icons.Archive size={17} /></button>}</footer>
+    <TaskWorkTimer card={c} /><footer className="kanban-task-footer">{priority && <span className="kanban-task-priority" data-priority={priority.value}><PriorityIcon size={14} />{priority.label}</span>}{due && <span className="kanban-task-due"><Icons.CalendarDays size={13} />{due}</span>}{c.board === 'kanban' && c.status === 'todo' && <button type="button" className="kanban-task-return" title="Devolver a planificación de Roadmap" aria-label={`Devolver ${c.title} a Roadmap`} disabled={actionBusy} onClick={e=>{e.stopPropagation();runAction('toRoadmap')}}><Icons.Undo2 size={17} /></button>}{c.status === 'done' && <button type="button" className="kanban-task-archive" title="Archivar tarea" aria-label={`Archivar ${c.title}`} disabled={actionBusy} onClick={e=>{e.stopPropagation();runAction('archive')}}><Icons.Archive size={17} /></button>}</footer>
   </article>
 }
 
@@ -255,8 +256,10 @@ export function KanbanWorkspace({ roadmap = false }) {
     try {
       const r = await api('/api/kanban/state')
       if (!r.ok || !r.data?.ok) throw new Error('No se pudieron cargar los datos')
-      stateRef.current = r.data
-      setState(r.data)
+      const receivedAt = Date.now()
+      const next = { ...r.data, cards: r.data.cards.map(card => ({ ...card, work_received_at: receivedAt })) }
+      stateRef.current = next
+      setState(next)
     } catch (e) { setError(e.message || 'No se pudo conectar con el servidor') }
     finally { setLoading(false) }
   }
@@ -540,6 +543,11 @@ export function KanbanWorkspace({ roadmap = false }) {
       priority: [1, 2, 3].includes(Number(c.priority)) ? Number(c.priority) : null,
       labels: Array.isArray(c.labels) ? c.labels : [],
       progress_pct: progressValue(c.progress_pct),
+      work_elapsed_ms: c.work_elapsed_ms,
+      work_total_ms: c.work_total_ms,
+      work_started_at: c.work_started_at,
+      work_sampled_at: c.work_sampled_at,
+      work_received_at: c.work_received_at,
       sync_progress: false,
       board: c.board,
       status: c.status,
@@ -574,52 +582,20 @@ export function KanbanWorkspace({ roadmap = false }) {
     refresh()
   }
 
+  const deleteTaskLock = React.useRef(false)
   async function deleteCardFromModal() {
-    if (!cardEdit.id) return
-    const r = await api(`/api/kanban/card?id=${encodeURIComponent(cardEdit.id)}`, { method: 'DELETE' })
-    if (!r.ok) {
-      toast.error('Error eliminando tarea')
-      return
-    }
-    toast.success('Tarea eliminada')
-    setCardOpen(false)
-    refresh()
-  }
-
-  function confirmDeleteCardFromModal() {
-    if (!cardEdit.id) return
-    toast.custom((t) => (
-      <div
-        className="feego-modal rounded-xl p-3 border border-white/10 max-w-sm"
-        style={{
-          animation: t.visible
-            ? 'toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards'
-            : 'toast-out 180ms ease-in forwards',
-        }}
-      >
-        <div className="font-bold text-sm">¿Eliminar tarea definitivamente?</div>
-        <div className="text-xs text-slate-400 mt-1">
-          Esta acción no se puede deshacer.
-        </div>
-        <div className="mt-3 flex justify-end gap-2">
-          <button
-            className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-xs"
-            onClick={() => toast.dismiss(t.id)}
-          >
-            No
-          </button>
-          <button
-            className={`${styles.dangerAction} px-2.5 py-1.5 rounded-lg text-xs font-semibold`}
-            onClick={async () => {
-              toast.dismiss(t.id)
-              await deleteCardFromModal()
-            }}
-          >
-            Sí, eliminar
-          </button>
-        </div>
-      </div>
-    ), { duration: 12000 })
+    if (!cardEdit.id || deleteTaskLock.current) return false
+    deleteTaskLock.current = true
+    try {
+      const r = await api(`/api/kanban/card?id=${encodeURIComponent(cardEdit.id)}`, { method: 'DELETE' })
+      if (!r.ok || !r.data?.ok) throw new Error('No se pudo eliminar la tarea. Intenta de nuevo.')
+      stateRef.current = { ...stateRef.current, cards: stateRef.current.cards.filter(card => card.id !== cardEdit.id) }
+      setState(stateRef.current)
+      setCardOpen(false)
+      await refresh()
+      toast.success('Tarea eliminada', { duration: 3000 })
+      return true
+    } finally { deleteTaskLock.current = false }
   }
 
   async function saveProject() {
@@ -920,7 +896,7 @@ export function KanbanWorkspace({ roadmap = false }) {
       </Dialog.Root>
       <NewTaskDialog open={newCardOpen} onOpenChange={setNewCardOpen} task={newCard} setTask={setNewCard} projects={state.projects} sections={state.sections} onCreated={refresh} />
 
-      <EditTaskDialog open={cardOpen} onOpenChange={setCardOpen} task={cardEdit} setTask={setCardEdit} projects={state.projects} sections={state.sections} canEditProgress={canEditProgress} saving={savingCard} onSave={saveEditedTask} onArchive={archiveCardFromModal} onDelete={confirmDeleteCardFromModal} />
+      <EditTaskDialog open={cardOpen} onOpenChange={setCardOpen} task={cardEdit} setTask={setCardEdit} projects={state.projects} sections={state.sections} canEditProgress={canEditProgress} saving={savingCard} onSave={saveEditedTask} onArchive={archiveCardFromModal} onDelete={deleteCardFromModal} />
 
       {/* Keep section and icon editing in one dialog so choosing an icon cannot dismiss its parent. */}
       <Dialog.Root open={editOpen} onOpenChange={setEditOpen}>

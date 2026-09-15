@@ -1,3 +1,4 @@
+import TaskWorkTimer from './TaskWorkTimer'
 import React from 'react'
 import * as Icons from 'lucide-react'
 import { useSearchParams, Link } from 'react-router-dom'
@@ -122,7 +123,7 @@ export default function RoadmapView({ state, loading, error, refresh, onNewProje
             const value = progressValue(card.progress_pct)
             const priority = { 1: { Icon: Icons.Flame, label: 'Alta' }, 2: { Icon: Icons.Sparkles, label: 'Media' }, 3: { Icon: Icons.Leaf, label: 'Baja' } }[card.priority]
             return <div className="roadmap-task" key={card.id}>
-              <div className="min-w-0"><button className="roadmap-task-title" onClick={() => onEditCard(card)}>{card.title}</button><div className="roadmap-task-meta"><TaskStatus state={taskState(card)} />{card.board === 'ideas' && <span>Planificación</span>}{card.due_at && <time dateTime={card.due_at}>{new Date(card.due_at).toLocaleDateString('es-CO')}</time>}</div></div>
+              <div className="min-w-0"><button className="roadmap-task-title" onClick={() => onEditCard(card)}>{card.title}</button><div className="roadmap-task-meta"><TaskStatus state={taskState(card)} /><TaskWorkTimer card={card} />{card.board === 'ideas' && <span>Planificación</span>}{card.due_at && <time dateTime={card.due_at}>{new Date(card.due_at).toLocaleDateString('es-CO')}</time>}</div></div>
               <span className="roadmap-task-priority" data-priority={card.priority} title={priority ? `Prioridad ${priority.label.toLowerCase()}` : undefined}>{priority && <priority.Icon size={18} role="img" aria-label={`Prioridad ${priority.label.toLowerCase()}`} />}</span>
               <div className="roadmap-task-progress" aria-label={`Avance de ${card.title}: ${value}%`}><span>{formatProgress(value)}</span><ProgressBar value={value} label={`Progreso de ${card.title}`} /></div>
               <div className="roadmap-task-actions">

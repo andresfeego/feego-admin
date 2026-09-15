@@ -12,3 +12,11 @@
 .edit-task-modal .feego-input { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .edit-task-modal .new-task-project-logo { background: #fff; }
 @media(max-width: 420px) { .edit-task-save-actions { width: 100%; justify-content: flex-end; } }
+.edit-task-modal [hidden] { display: none !important; }
+.edit-task-confirm { padding: 28px 26px; overflow-y: auto; }
+.edit-task-confirm > svg { color: var(--color-danger); margin-bottom: 14px; }
+.edit-task-confirm h3 { font-size: 18px; font-weight: 750; }
+.edit-task-confirm p { margin-top: 10px; font-size: 14px; color: var(--feego-muted); overflow-wrap: anywhere; }
+.edit-task-confirm > div { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+.edit-task-confirm .edit-task-confirm-delete { background: var(--color-danger); color: white; }
+.edit-task-confirm .new-task-error { color: var(--color-danger); }

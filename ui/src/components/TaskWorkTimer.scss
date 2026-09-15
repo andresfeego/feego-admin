@@ -1,0 +1,6 @@
+.task-work-timer { display:inline-flex; align-items:center; gap:6px; color:var(--feego-muted); font-size:11px; white-space:nowrap; }
+.task-work-timer strong { font-weight:650; font-variant-numeric:tabular-nums; }
+.task-work-timer.is-running { color:var(--feego-primary); }
+.task-work-timer.is-detailed { display:flex; padding:12px 14px; margin-top:14px; border:1px solid var(--feego-border); border-radius:10px; background:var(--surface-overlay-soft); gap:10px; }
+.task-work-timer.is-detailed small { display:block; font-size:11px; color:var(--feego-muted); margin-bottom:3px; }
+.task-work-timer.is-detailed strong { font-size:18px; }

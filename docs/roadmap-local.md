@@ -138,3 +138,14 @@ Roadmap muestra Play en todas las tareas cuyo estado calculado es pendiente. Si 
 - Configuración queda dedicada a apariencia con previsualizaciones Claro/Oscuro/Sistema. Uploads utiliza iconos Lucide por tipo y mantiene vista previa, descarga, eliminación y carga múltiple.
 - El marco de la aplicación mide `100dvh`; el contenido y los ítems de navegación tienen scroll independiente. Al cambiar de ruta se restablece el scroll del contenido.
 - Verificado localmente: build Vite, sintaxis de server.js y 7 pruebas de Roadmap. Revisión visual en 1280×720, 1280×480 y 390×844, tema claro/oscuro, modal de colores (guardado del mismo color de Altezza y reapertura), vista previa de imagen y detalle del Diario. En página larga, scroll del contenido 4682 px con sidebar top 0 / alto 480 px, scroll de ventana 0 y navegación con scroll propio; al navegar, contenido vuelve a 0.
+
+## Tiempo de trabajo por tarea
+
+- Migración `20260915150000_kb_work_timer.js`: milisegundos acumulados y fecha UTC de inicio de la sesión activa. Ejecutar la migración antes de iniciar el backend actualizado.
+- El tiempo corre únicamente en Kanban/Haciendo y con progreso inferior a 100. Por hacer, Hecho, Roadmap y Archivadas detienen la sesión y conservan lo acumulado. Reabrir en Haciendo suma otra sesión. Al reabrir por API sin porcentaje, un 100 se baja a 99 para reactivar el trabajo.
+- Se usa el reloj de MariaDB y una actualización atómica por tarea: reordenar, editar o repetir una transición no reinicia la sesión ni suma dos veces. El cliente no puede sobrescribir el acumulado.
+- `work_elapsed_ms` es el acumulado de sesiones cerradas; `work_total_ms` añade la sesión activa al consultar. `work_started_at` y `work_sampled_at` se devuelven en UTC. La UI interpola desde la recepción de la muestra y refresca el contador cada segundo; abrir el editor no reinicia el tiempo mostrado. Un cambio de estado desde otro dispositivo se refleja al actualizar datos.
+- Sigue contando con el navegador cerrado mientras la tarea permanezca en Haciendo; no mide presencia, horarios laborales ni actividad del teclado.
+- Las tareas que ya estaban en Haciendo empiezan en el momento de aplicar la migración; el tiempo histórico anterior no se reconstruye. Las demás empiezan en cero.
+- Visible en Kanban, lista de tareas por sección, archivadas y editor. Formato HH:MM:SS con horas acumuladas superiores a 24.
+- Prueba local: `FEEGO_TEST_PASSWORD=... node tests/work-timer-local.cjs`. Verifica inicio, pausa concurrente, reanudación, porcentaje 100, Hecho, reapertura, archivo, retorno a planificación, edición sin reinicio, creación directa y rechazo de tiempos enviados por cliente. Solo usa fixtures en MariaDB local 3308.

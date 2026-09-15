@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { validProgress, progressStatus } = require('./lib/kanban-progress.cjs');
+const { timerUpdateSql, timerSelectSql } = require('./lib/kanban-work-timer.cjs');
 const helmet = require('helmet');
 const compression = require('compression');
 const session = require('express-session');
@@ -2865,8 +2866,8 @@ async function getKanbanState(conn) {
   const projects = await conn.query('SELECT id, name, sort, description, logo_path, priority FROM kb_projects WHERE archived=0 ORDER BY sort ASC, id ASC');
   const sections = await conn.query('SELECT id, project_id, name, color, icon, sort FROM kb_sections WHERE archived=0 ORDER BY project_id ASC, sort ASC, id ASC');
   const cards = supportsSectionIdsJson
-    ? await conn.query(`SELECT id, title, notes, project_id, board, status, sort, DATE_FORMAT(due_at, '%Y-%m-%dT%H:%i:%s.000Z') AS due_at, section_id, section_name, section_ids_json, priority, labels_json, roadmap_order_json${supportsCardProgress ? ', progress_pct' : ''}, DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.000Z') AS updated_at FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC`)
-    : await conn.query(`SELECT id, title, notes, project_id, board, status, sort, DATE_FORMAT(due_at, '%Y-%m-%dT%H:%i:%s.000Z') AS due_at, section_id, section_name, priority, labels_json, roadmap_order_json${supportsCardProgress ? ', progress_pct' : ''}, DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.000Z') AS updated_at FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC`);
+    ? await conn.query(`SELECT id, title, notes, project_id, board, status, sort, DATE_FORMAT(due_at, '%Y-%m-%dT%H:%i:%s.000Z') AS due_at, section_id, section_name, section_ids_json, priority, labels_json, roadmap_order_json${timerSelectSql}${supportsCardProgress ? ', progress_pct' : ''}, DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.000Z') AS updated_at FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC`)
+    : await conn.query(`SELECT id, title, notes, project_id, board, status, sort, DATE_FORMAT(due_at, '%Y-%m-%dT%H:%i:%s.000Z') AS due_at, section_id, section_name, priority, labels_json, roadmap_order_json${timerSelectSql}${supportsCardProgress ? ', progress_pct' : ''}, DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.000Z') AS updated_at FROM kb_cards ORDER BY board ASC, status ASC, sort ASC, id ASC`);
 
   const pmap = { };
   for (const p of projects) pmap[p.id] = p.name;
@@ -2929,6 +2930,10 @@ async function getKanbanState(conn) {
       sections: cardSections.map((s) => ({ id: Number(s.id), name: s.name, color: s.color, icon: s.icon })),
       priority: c.priority == null ? null : Number(c.priority),
       labels: (() => { try { return c.labels_json ? JSON.parse(c.labels_json) : []; } catch { return []; } })(),
+      work_elapsed_ms: Number(c.work_elapsed_ms || 0),
+      work_total_ms: Number(c.work_total_ms || 0),
+      work_started_at: c.work_started_at ? new Date(c.work_started_at).toISOString() : null,
+      work_sampled_at: c.work_sampled_at ? new Date(c.work_sampled_at).toISOString() : null,
       roadmap_order: (() => { try { return typeof c.roadmap_order_json === 'string' ? JSON.parse(c.roadmap_order_json) || {} : c.roadmap_order_json || {}; } catch { return {}; } })(),
       progress_pct: supportsCardProgress ? clampProgress(c.progress_pct, c.board === 'kanban' && c.status === 'done' ? 100 : 0) : (c.board === 'kanban' && c.status === 'done' ? 100 : 0),
       updated_at: c.updated_at ? new Date(c.updated_at).toISOString() : null,
@@ -3340,7 +3345,7 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
     const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
     if (supportsSectionIdsJson) {
       await conn.query(
-        `INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_ids_json, due_at, priority, labels_json${supportsCardProgress ? ', progress_pct' : ''}) VALUES (?,?,?,?,?,?,?,?,?,?,?${supportsCardProgress ? ',?' : ''})`,
+        `INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_ids_json, due_at, priority, labels_json${supportsCardProgress ? ', progress_pct' : ''}, work_started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?${supportsCardProgress ? ',?' : ''}, ${board === 'kanban' && status === 'doing' && progress_pct < 100 ? 'UTC_TIMESTAMP(3)' : 'NULL'})`,
         [title, notes, project_id, board, status, insertSort, primarySectionId, JSON.stringify(section_ids), due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : []), ...(supportsCardProgress ? [progress_pct] : [])]
       );
     } else {
@@ -3348,7 +3353,7 @@ app.post('/api/kanban/card', requireAuth, async (req, res) => {
       const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
       const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
       await conn.query(
-        `INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_name, due_at, priority, labels_json${supportsCardProgress ? ', progress_pct' : ''}) VALUES (?,?,?,?,?,?,?,?,?,?,?${supportsCardProgress ? ',?' : ''})`,
+        `INSERT INTO kb_cards (title, notes, project_id, board, status, sort, section_id, section_name, due_at, priority, labels_json${supportsCardProgress ? ', progress_pct' : ''}, work_started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?${supportsCardProgress ? ',?' : ''}, ${board === 'kanban' && status === 'doing' && progress_pct < 100 ? 'UTC_TIMESTAMP(3)' : 'NULL'})`,
         [title, notes, project_id, board, status, insertSort, primarySectionId, sectionNameSerialized, due_at, priority, JSON.stringify(Array.isArray(labels) ? labels : []), ...(supportsCardProgress ? [progress_pct] : [])]
       );
     }
@@ -3392,8 +3397,10 @@ app.post('/api/kanban/move', requireAuth, async (req, res) => {
     if (sort !== undefined) { fields.push('sort=?'); params.push(sort); }
     if (hasProgress && board !== 'archived') { fields.push('progress_pct=?'); params.push(progress); }
     else if (board === 'kanban' && status === 'done' && supportsCardProgress) { fields.push('progress_pct=?'); params.push(100); }
+    // Reopening a completed task without a percentage must resume its timer.
+    if (!hasProgress && board === 'kanban' && status === 'doing') fields.push('progress_pct=LEAST(progress_pct,99)');
     params.push(id);
-    await conn.query('UPDATE kb_cards SET ' + fields.join(', ') + ' WHERE id=?', params);
+    await conn.query('UPDATE kb_cards SET ' + fields.join(', ') + timerUpdateSql + ' WHERE id=?', params);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false });
@@ -3460,7 +3467,7 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
     const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
     if (supportsSectionIdsJson) {
       await conn.query(
-        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_ids_json=?, due_at=?, priority=?, labels_json=?${progressSql}${syncSql} WHERE id=?`,
+        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_ids_json=?, due_at=?, priority=?, labels_json=?${progressSql}${syncSql}${timerUpdateSql} WHERE id=?`,
         [title, notes, project_id, primarySectionId, JSON.stringify(section_ids), due_at, priority, labels_json, ...progressParams, id]
       );
     } else {
@@ -3468,7 +3475,7 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
       const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
       const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
       await conn.query(
-        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_name=?, due_at=?, priority=?, labels_json=?${progressSql}${syncSql} WHERE id=?`,
+        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_name=?, due_at=?, priority=?, labels_json=?${progressSql}${syncSql}${timerUpdateSql} WHERE id=?`,
         [title, notes, project_id, primarySectionId, sectionNameSerialized, due_at, priority, labels_json, ...progressParams, id]
       );
     }
