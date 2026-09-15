@@ -748,7 +748,10 @@ export function KanbanWorkspace({ roadmap = false }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project_id: edit.id, name, color: secColor, icon: secIcon }),
     })
-    if (!r.ok) return alert('Error creando sección')
+    if (!r.ok) {
+      if (r.status === 409 || r.data?.error === 'duplicate_section_name') return toast.error('Ya existe una sección con ese nombre')
+      return toast.error('Error creando sección')
+    }
     setSecName('')
     refresh()
   }

@@ -3532,6 +3532,16 @@ app.post('/api/kanban/sections', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     if (e && e.code === 'ER_DUP_ENTRY') {
+      try {
+        const existing = await conn.query('SELECT id, archived FROM kb_sections WHERE project_id=? AND name=? LIMIT 1', [project_id, name]);
+        const row = existing && existing[0];
+        if (row && Number(row.archived) === 1) {
+          await conn.query('UPDATE kb_sections SET archived=0, color=?, icon=?, sort=9999 WHERE id=?', [color, icon, Number(row.id)]);
+          return res.json({ ok: true, revived: true });
+        }
+      } catch (reviveError) {
+        console.error('kanban/sections revive error', reviveError);
+      }
       return res.status(409).json({ ok: false, error: 'duplicate_section_name' });
     }
     console.error('kanban/sections create error', e);
