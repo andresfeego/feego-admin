@@ -3441,6 +3441,11 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
     return res.status(400).json({ ok: false, error: 'invalid_progress' });
   }
 
+  const hasManualTime = Object.prototype.hasOwnProperty.call(req.body || {}, 'manual_work_seconds');
+  const manualSeconds = req.body?.manual_work_seconds;
+  if (hasManualTime && (!Number.isSafeInteger(manualSeconds) || manualSeconds < 0 || manualSeconds > 3599999999)) {
+    return res.status(400).json({ ok: false, error: 'invalid_work_time' });
+  }
   if (!title) return res.status(400).json({ ok: false });
 
   let conn;
@@ -3452,6 +3457,11 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
     // SQL expressions keep archived cards archived and update state atomically.
     const progressSql = hasProgress ? ', progress_pct=?' : '';
     const syncSql = syncProgress ? ", status=CASE WHEN board='archived' THEN status ELSE ? END, board=CASE WHEN board='archived' THEN board ELSE 'kanban' END" : '';
+    // Explicit correction replaces the total at save time; active work resumes now.
+    const workSql = hasManualTime
+      ? ", work_elapsed_ms=?, work_started_at=CASE WHEN board='kanban' AND status='doing' AND progress_pct<100 THEN UTC_TIMESTAMP(3) ELSE NULL END"
+      : timerUpdateSql;
+    const workParams = hasManualTime ? [manualSeconds * 1000] : [];
     const progressParams = [...(hasProgress ? [progress_pct] : []), ...(syncProgress ? [progressStatus(progress_pct)] : [])];
     let sectionRows = [];
     // validate sections belong to project (if provided)
@@ -3467,16 +3477,16 @@ app.post('/api/kanban/card/update', requireAuth, async (req, res) => {
     const primarySectionId = section_ids.length > 0 ? section_ids[0] : null;
     if (supportsSectionIdsJson) {
       await conn.query(
-        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_ids_json=?, due_at=?, priority=?, labels_json=?${progressSql}${syncSql}${timerUpdateSql} WHERE id=?`,
-        [title, notes, project_id, primarySectionId, JSON.stringify(section_ids), due_at, priority, labels_json, ...progressParams, id]
+        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_ids_json=?, due_at=?, priority=?, labels_json=?${progressSql}${syncSql}${workSql} WHERE id=?`,
+        [title, notes, project_id, primarySectionId, JSON.stringify(section_ids), due_at, priority, labels_json, ...progressParams, ...workParams, id]
       );
     } else {
       const namesById = new Map((sectionRows || []).map((r) => [Number(r.id), String(r.name || '')]));
       const sectionNameList = section_ids.map((sid) => namesById.get(Number(sid))).filter(Boolean);
       const sectionNameSerialized = sectionNameList.length > 0 ? sectionNameList.join(' || ') : null;
       await conn.query(
-        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_name=?, due_at=?, priority=?, labels_json=?${progressSql}${syncSql}${timerUpdateSql} WHERE id=?`,
-        [title, notes, project_id, primarySectionId, sectionNameSerialized, due_at, priority, labels_json, ...progressParams, id]
+        `UPDATE kb_cards SET title=?, notes=?, project_id=?, section_id=?, section_name=?, due_at=?, priority=?, labels_json=?${progressSql}${syncSql}${workSql} WHERE id=?`,
+        [title, notes, project_id, primarySectionId, sectionNameSerialized, due_at, priority, labels_json, ...progressParams, ...workParams, id]
       );
     }
     res.json({ ok: true });

@@ -1,4 +1,4 @@
-import TaskWorkTimer from './TaskWorkTimer'
+import TaskWorkTimer, { formatWorkTime } from './TaskWorkTimer'
 import React from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Icons from 'lucide-react'
@@ -18,6 +18,14 @@ function localDate(value) {
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 export default function EditTaskDialog({ open, onOpenChange, task, setTask, projects, sections, canEditProgress, saving, onSave, onArchive, onDelete }) {
+  const [editingTime,setEditingTime]=React.useState(false)
+  const [timeText,setTimeText]=React.useState('')
+  const [timeError,setTimeError]=React.useState('')
+  React.useEffect(()=>{setEditingTime(false);setTimeText('');setTimeError('')},[open,task.id])
+  function editTime() {
+    const current = Number(task.work_total_ms ?? task.work_elapsed_ms ?? 0) + (task.work_started_at ? Math.max(0,Date.now()-(task.work_received_at ?? Date.now())) : 0)
+    setTimeText(formatWorkTime(current));setEditingTime(true);setTimeError('')
+  }
   const [labelsText,setLabelsText]=React.useState('')
   const [actionBusy,setActionBusy]=React.useState(false)
   const [confirmDelete,setConfirmDelete]=React.useState(false)
@@ -35,7 +43,16 @@ export default function EditTaskDialog({ open, onOpenChange, task, setTask, proj
   const disabled=saving || actionBusy
   const available=sections.filter(s=>Number(s.project_id)===Number(task.project_id))
   const selected=(task.section_ids || []).map(Number)
-  async function submit(e) {e.preventDefault();if(disabled || confirmDelete || !task.title.trim())return;await onSave({...task,title:task.title.trim(),labels:labelsText.split(',').map(v=>v.trim()).filter(Boolean)})}
+  async function submit(e) {
+    e.preventDefault();if(disabled || confirmDelete || !task.title.trim())return
+    let manualSeconds
+    if(editingTime) {
+      if(!/^\d{1,6}:[0-5]\d:[0-5]\d$/.test(timeText.trim())) {setTimeError('Usa horas:minutos:segundos, por ejemplo 02:30:00.');return}
+      const [h,m,s]=timeText.trim().split(':').map(Number)
+      manualSeconds=h*3600+m*60+s
+    }
+    await onSave({...task,title:task.title.trim(),labels:labelsText.split(',').map(v=>v.trim()).filter(Boolean),...(editingTime ? {manual_work_seconds:manualSeconds} : {})})
+  }
   async function archive(){setActionBusy(true);try{await onArchive()}finally{setActionBusy(false)}}
   return <Dialog.Root open={open} onOpenChange={v=>{if(!disabled)onOpenChange(v)}}><Dialog.Portal><Dialog.Overlay className="feego-overlay new-task-overlay" /><Dialog.Content className="feego-modal new-task-modal edit-task-modal">
     <form onSubmit={submit}><header className="new-task-header"><span className="new-task-heading-icon"><Icons.ListChecks size={24} /></span><div><Dialog.Title>Editar tarea</Dialog.Title><Dialog.Description>Actualiza los detalles y la planificación.</Dialog.Description></div><Dialog.Close asChild><Button variant="ghost" type="button" disabled={disabled} aria-label="Cerrar edición de tarea"><Icons.X size={19} /></Button></Dialog.Close></header>
@@ -43,7 +60,7 @@ export default function EditTaskDialog({ open, onOpenChange, task, setTask, proj
     <div className="new-task-body" hidden={confirmDelete}><fieldset disabled={disabled || confirmDelete}>
       <label className="new-task-label" htmlFor="edit-task-title">Título</label><Input id="edit-task-title" className="new-task-title" value={task.title || ''} onChange={e=>setTask(t=>({...t,title:e.target.value}))} required maxLength={255} />
       <section className="edit-task-progress"><div className="edit-task-progress-heading"><h3><Icons.ChartNoAxesCombined size={16} />Avance</h3>{task.board==='archived' ? <span><Icons.Archive size={14} />Archivada</span> : <TaskStatus state={taskState(task)} />}</div>{canEditProgress ? <ProgressControl label="Progreso de la tarea" value={task.progress_pct ?? 0} onChange={value=>setTask(t=>({...t,progress_pct:value,sync_progress:true}))} disabled={disabled} /> : <div className="edit-task-progress-readonly"><ProgressBar value={progressValue(task.progress_pct)} label="Avance de la tarea" /><strong>{progressValue(task.progress_pct)}%</strong></div>}</section>
-      <TaskWorkTimer card={task} detailed /><section><h3><Icons.Folders size={16} />Proyecto</h3><div className="new-task-projects" role="group" aria-label="Proyecto de la tarea">{[...projects,{id:null,name:'Sin proyecto'}].map(p=><button type="button" key={p.id || 'none'} className="new-task-project" aria-pressed={task.project_id===p.id} onClick={()=>{if(task.project_id!==p.id)setTask(t=>({...t,project_id:p.id,section_id:null,section_ids:[]}))}}><span className="new-task-project-logo"><Logo project={p} /></span><span>{p.name}</span><Icons.Check size={15} className="new-task-selection" /></button>)}</div></section>
+      <section className="edit-task-time"><div className="edit-task-progress-heading"><h3><Icons.Timer size={16} />Tiempo de trabajo</h3><Button type="button" variant="ghost" onClick={()=>{if(editingTime){setEditingTime(false);setTimeError('')}else editTime()}}><Icons.Pencil size={14} />{editingTime?'Descartar ajuste':'Editar tiempo'}</Button></div>{editingTime ? <><label className="new-task-label" htmlFor="edit-task-work-time">Tiempo total · horas:minutos:segundos</label><Input id="edit-task-work-time" value={timeText} onChange={e=>{setTimeText(e.target.value);setTimeError('')}} placeholder="02:30:00" maxLength={12} aria-invalid={!!timeError} aria-describedby="edit-task-time-hint" /><p id="edit-task-time-hint" className="edit-task-hint">Reemplaza el acumulado al guardar. Si está en Haciendo, seguirá contando desde ese valor.</p>{timeError && <p role="alert" className="new-task-error">{timeError}</p>}</> : <TaskWorkTimer card={task} detailed />}</section><section><h3><Icons.Folders size={16} />Proyecto</h3><div className="new-task-projects" role="group" aria-label="Proyecto de la tarea">{[...projects,{id:null,name:'Sin proyecto'}].map(p=><button type="button" key={p.id || 'none'} className="new-task-project" aria-pressed={task.project_id===p.id} onClick={()=>{if(task.project_id!==p.id)setTask(t=>({...t,project_id:p.id,section_id:null,section_ids:[]}))}}><span className="new-task-project-logo"><Logo project={p} /></span><span>{p.name}</span><Icons.Check size={15} className="new-task-selection" /></button>)}</div></section>
       <section className="new-task-date"><label className="new-task-label" htmlFor="edit-task-date"><Icons.CalendarDays size={16} />Fecha límite <span>Opcional</span></label><Input id="edit-task-date" type="datetime-local" value={localDate(task.due_at)} onChange={e=>setTask(t=>({...t,due_at:e.target.value ? new Date(e.target.value).toISOString() : null}))} /></section>
       <section><h3><Icons.Tags size={16} />Secciones <span>Opcional · puedes elegir varias</span></h3><div className="new-task-badges" role="group" aria-label="Secciones de la tarea"><button type="button" className="new-task-badge" aria-pressed={!selected.length} onClick={()=>setTask(t=>({...t,section_id:null,section_ids:[]}))}><Icons.Minus size={14} />Sin sección</button>{available.map(s=>{const Icon=Icons[s.icon] || Icons.Tag;const checked=selected.includes(Number(s.id));return <button type="button" key={s.id} className="new-task-badge" aria-pressed={checked} onClick={()=>setTask(t=>{const ids=checked ? selected.filter(id=>id!==Number(s.id)) : [...selected,Number(s.id)];return {...t,section_id:ids[0] || null,section_ids:ids}})}><Icon size={14} /><span>{s.name}</span>{checked && <Icons.Check size={13} />}</button>})}</div></section>
       <section><h3><Icons.Flag size={16} />Prioridad</h3><div className="new-task-priorities" role="group" aria-label="Prioridad de la tarea"><button type="button" className="new-task-badge" aria-pressed={task.priority==null} onClick={()=>setTask(t=>({...t,priority:null}))}><Icons.Minus size={14} />Sin prioridad</button>{priorities.map(({value,name,Icon})=><button type="button" key={value} className="new-task-badge" data-priority={value} aria-pressed={task.priority===value} onClick={()=>setTask(t=>({...t,priority:value}))}><Icon size={16} />{name}</button>)}</div></section>

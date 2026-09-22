@@ -48,6 +48,29 @@ const assert = require('node:assert/strict');
     // Invalid edits must not mutate timing.
     const r = await fetch('http://127.0.0.1:3030/api/kanban/card/update', { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ id, title, progress_pct: 101 }) });
     assert.equal(r.status, 400); assert.equal((await state()).work_elapsed_ms, c.work_elapsed_ms);
+    // Manual corrections replace total at save, never double-count the open session.
+    for (const status of ['todo', 'doing', 'done']) {
+      await move(status);
+      if (status === 'doing') await age();
+      await request('/api/kanban/card/update', { id, title, manual_work_seconds: 90061 });
+      c = await state(); assert.equal(c.work_elapsed_ms, 90061000);
+      assert.equal(!!c.work_started_at, status === 'doing');
+      assert.ok(c.work_total_ms >= 90061000 && c.work_total_ms < 90066000);
+      const started = c.work_started_at;
+      await request('/api/kanban/card/update', { id, title, notes: 'No time edit' });
+      c = await state(); assert.equal(c.work_elapsed_ms, 90061000); assert.equal(c.work_started_at, started);
+    }
+    await move('doing'); await age();
+    await request('/api/kanban/card/update', { id, title, manual_work_seconds: 42, progress_pct:100, sync_progress:true });
+    c = await state(); paused(c); assert.equal(c.work_total_ms, 42000);
+    await move('n/a', 'archived');
+    await request('/api/kanban/card/update', { id, title, manual_work_seconds: 0 });
+    c = await state(); paused(c); assert.equal(c.work_total_ms, 0);
+    for (const value of [-1, 0.5, '120', null, 3600000000]) {
+      const invalid = await fetch('http://127.0.0.1:3030/api/kanban/card/update', { method:'POST', headers:{ Cookie:cookie, 'Content-Type':'application/json' }, body:JSON.stringify({ id, title, manual_work_seconds:value }) });
+      assert.equal(invalid.status,400); assert.equal((await state()).work_total_ms,0);
+    }
+    console.log('PASS: manual time active/paused/done/archived, >24h, zero, atomic completion, untouched timer, invalid corrections.');
     // Creating directly in Doing starts timing atomically too.
     await request('/api/kanban/card', { title: title + '_direct', board: 'kanban', status: 'doing', progress_pct: 20 });
     const direct = (await request('/api/kanban/state', null, 'GET')).cards.find(c => c.title === title + '_direct');

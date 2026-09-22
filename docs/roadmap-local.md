@@ -149,3 +149,11 @@ Roadmap muestra Play en todas las tareas cuyo estado calculado es pendiente. Si 
 - Las tareas que ya estaban en Haciendo empiezan en el momento de aplicar la migración; el tiempo histórico anterior no se reconstruye. Las demás empiezan en cero.
 - Visible en Kanban, lista de tareas por sección, archivadas y editor. Formato HH:MM:SS con horas acumuladas superiores a 24.
 - Prueba local: `FEEGO_TEST_PASSWORD=... node tests/work-timer-local.cjs`. Verifica inicio, pausa concurrente, reanudación, porcentaje 100, Hecho, reapertura, archivo, retorno a planificación, edición sin reinicio, creación directa y rechazo de tiempos enviados por cliente. Solo usa fixtures en MariaDB local 3308.
+
+### Corrección manual del tiempo (22 septiembre 2026)
+
+En Editar tarea, «Editar tiempo» permite reemplazar el acumulado mediante HH:MM:SS (hasta 999999:59:59). «Descartar ajuste» vuelve al contador; cancelar el modal no guarda nada. Solo se envía `manual_work_seconds` cuando se activa el ajuste y se guardan los cambios. Las demás ediciones mantienen el cronómetro intacto.
+
+El backend valida segundos enteros no negativos y aplica la corrección de forma atómica junto con el resto de la tarjeta. Si el estado final sigue siendo Haciendo con progreso menor a 100, fija una nueva sesión desde la hora del servidor. En cualquier otro estado queda pausado. Puede corregirse a cero y también en tareas archivadas. No requiere otra migración.
+
+Validación: build UI y `tests/work-timer-local.cjs`, con correcciones en estados activo/pausado/completado/archivado, más de 24 horas, cero, finalización simultánea y valores inválidos.

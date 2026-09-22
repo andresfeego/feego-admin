@@ -562,6 +562,7 @@ export function KanbanWorkspace({ roadmap = false }) {
     saveTaskLock.current = true; setSavingCard(true)
     try {
       const payload = cardPayload(task, { sync_progress: canEditProgress && task.sync_progress })
+      if (task.manual_work_seconds !== undefined) payload.manual_work_seconds = task.manual_work_seconds
       if (!canEditProgress || !task.sync_progress) delete payload.progress_pct
       const r = await api('/api/kanban/card/update', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
       if (!r.ok) { toast.error(r.status === 409 ? 'No se pudo guardar. Actualiza los datos e intenta de nuevo.' : 'No se pudo guardar la tarea'); return }
