@@ -1027,6 +1027,9 @@ function drawWrappedText(page, text, x, y, maxWidth, lineHeight, font, size, col
   return yy;
 }
 
+const serviceQuoteModel = import('./shared/service-quotes.mjs');
+const { renderServiceQuote } = require('./lib/service-quote-pdf.cjs');
+
 app.get('/api/quotes', requireAuth, async (req, res) => {
   try {
     const q = await readQuotes();
@@ -1046,6 +1049,12 @@ app.post('/api/quotes', requireAuth, async (req, res) => {
     const totalize = body.totalize !== false;
     const items = Array.isArray(body.items) ? body.items : [];
     if (!customer) return res.status(400).json({ ok: false, error: 'missing_customer' });
+    let quoteKind;
+    try {
+      if (body.type && !['products','services'].includes(body.type)) throw Error('Tipo de cotización inválido.');
+      quoteKind = (await serviceQuoteModel).normalizeServiceQuote(body);
+    } catch (error) { return res.status(400).json({ ok:false, error:'invalid_service_quote', message:error.message }); }
+
 
     const cleanedItems = items
       .map((it) => ({
@@ -1065,7 +1074,7 @@ app.post('/api/quotes', requireAuth, async (req, res) => {
 
     const id = crypto.randomBytes(8).toString('hex');
     const createdAt = new Date().toISOString();
-    const quote = { id, customer, date, notes, totalize, items: cleanedItems, createdAt, createdBy: req.session.username || 'unknown' };
+    const quote = { ...quoteKind, id, customer, date, notes, totalize: quoteKind.type === 'services' ? true : totalize, items: quoteKind.type === 'services' ? [] : cleanedItems, createdAt, createdBy: req.session.username || 'unknown' };
 
     const list = await readQuotes();
     list.unshift(quote);
@@ -1095,6 +1104,12 @@ app.put('/api/quotes/:id', requireAuth, async (req, res) => {
     const totalize = body.totalize !== false;
     const items = Array.isArray(body.items) ? body.items : [];
     if (!customer) return res.status(400).json({ ok: false, error: 'missing_customer' });
+    let quoteKind;
+    try {
+      if (body.type && !['products','services'].includes(body.type)) throw Error('Tipo de cotización inválido.');
+      quoteKind = (await serviceQuoteModel).normalizeServiceQuote(body);
+    } catch (error) { return res.status(400).json({ ok:false, error:'invalid_service_quote', message:error.message }); }
+
 
     const cleanedItems = items
       .map((it) => ({
@@ -1119,11 +1134,12 @@ app.put('/api/quotes/:id', requireAuth, async (req, res) => {
     const prev = list[idx] || {};
     const updated = {
       ...prev,
+      ...quoteKind,
       customer,
       date,
       notes,
-      totalize,
-      items: cleanedItems,
+      totalize: quoteKind.type === 'services' ? true : totalize,
+      items: quoteKind.type === 'services' ? [] : cleanedItems,
       updatedAt: new Date().toISOString(),
       updatedBy: req.session.username || 'unknown',
     };
@@ -1143,6 +1159,15 @@ app.get('/api/quotes/:id/pdf', requireAuth, async (req, res) => {
   const forceDownload = String((req.query && req.query.download) || '') === '1';
 
   const branding = await readBranding();
+  if (q.type === 'services') {
+    try {
+      const bytes = await renderServiceQuote(q, branding, getBrandingPaths());
+      res.setHeader('Content-Type','application/pdf');
+      res.setHeader('Content-Disposition',`${forceDownload ? 'attachment' : 'inline'}; filename="propuesta-software-${q.id}.pdf"`);
+      res.setHeader('Cache-Control','no-store');
+      return res.send(Buffer.from(bytes));
+    } catch (error) { console.error('service quote PDF error', error); return res.status(500).send('pdf_error'); }
+  }
   const [r, g, b] = hexToRgbSafe(branding.accentColor);
   const accent = rgb(r / 255, g / 255, b / 255);
   const doc = await PDFDocument.create();

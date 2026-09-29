@@ -1,4 +1,7 @@
 import React from 'react'
+import ServiceQuoteForm from '../components/ServiceQuoteForm'
+import { serviceTotals } from '../../../shared/service-quotes.mjs'
+import { Code2 } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Eye, FileText, Link2, Pencil, Plus, Share2, X, Settings, Search, RefreshCw, Download, CalendarDays, Package, Users, ArrowUpDown } from 'lucide-react'
 
@@ -180,7 +183,12 @@ function mapQuoteItemsToForm(items) {
   }))
 }
 
-function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
+function NewQuoteForm(props) {
+  const [type,setType]=React.useState(props.initialQuote?.type || 'products')
+  return <><div className="quote-type-picker" role="group" aria-label="Tipo de cotización"><button type="button" aria-pressed={type==='products'} disabled={!!props.initialQuote} onClick={()=>setType('products')}><Package size={17}/>Productos</button><button type="button" aria-pressed={type==='services'} disabled={!!props.initialQuote} onClick={()=>setType('services')}><Code2 size={17}/>Servicios de software</button></div>{type==='services'?<ServiceQuoteForm {...props}/>:<ProductQuoteForm {...props}/>}</>
+}
+
+function ProductQuoteForm({ onSaved, onClose, initialQuote = null }) {
   const isEdit = Boolean(initialQuote && initialQuote.id)
   const [customer, setCustomer] = React.useState('')
   const [date, setDate] = React.useState(new Date().toISOString().slice(0,10))
@@ -605,6 +613,7 @@ function NewQuoteForm({ onSaved, onClose, initialQuote = null }) {
 }
 
 export default function QuotesPage() {
+  const [typeFilter,setTypeFilter]=React.useState('all')
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [sort, setSort] = React.useState('newest')
@@ -637,7 +646,7 @@ export default function QuotesPage() {
 
   const quoteDate = q => String(q.date || q.createdAt || '').slice(0, 10)
   const displayDate = q => { const d = quoteDate(q); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('/') : 'Sin fecha' }
-  const visibleQuotes = [...list].filter(q => `${q.customer || ''} ${(q.items || []).map(i => i.name).join(' ')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort((a,b) => sort === 'customer' ? String(a.customer || '').localeCompare(String(b.customer || ''), 'es') : sort === 'oldest' ? quoteDate(a).localeCompare(quoteDate(b)) : quoteDate(b).localeCompare(quoteDate(a)))
+  const visibleQuotes = [...list].filter(q => typeFilter==='all' || (q.type || 'products')===typeFilter).filter(q => `${q.customer || ''} ${q.service?.title || ''} ${(q.service?.modules || q.items || []).map(i => i.name).join(' ')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort((a,b) => sort === 'customer' ? String(a.customer || '').localeCompare(String(b.customer || ''), 'es') : sort === 'oldest' ? quoteDate(a).localeCompare(quoteDate(b)) : quoteDate(b).localeCompare(quoteDate(a)))
   const customers = new Set(list.map(q => String(q.customer || '').trim().toLocaleLowerCase()).filter(Boolean)).size
   const totalFor = q => (q.items || []).reduce((sum, i) => sum + Number(i.qty || 0) * Number(i.unitPrice || 0), 0).toLocaleString('es-CO', { maximumFractionDigits: 2 })
 
@@ -724,15 +733,15 @@ export default function QuotesPage() {
 
         <div className="quotes-summary"><div><FileText size={19} /><strong>{list.length}</strong><span>Cotizaciones</span></div><div><Users size={19} /><strong>{customers}</strong><span>{customers === 1 ? 'Cliente' : 'Clientes'}</span></div><span className="quotes-summary-note">Hasta 200 cotizaciones recientes</span></div>
         <section className="quotes-list" aria-label="Listado de cotizaciones">
-          <div className="quotes-list-toolbar"><h2>Cotizaciones recientes <span>{visibleQuotes.length}</span></h2><div className="quotes-filters"><label className="quotes-search"><Search size={17} /><Input aria-label="Buscar cotización" placeholder="Buscar cliente o producto" value={query} onChange={e => setQuery(e.target.value)} /></label><label className="quotes-sort"><ArrowUpDown size={16} /><select aria-label="Ordenar cotizaciones" value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Más recientes</option><option value="oldest">Más antiguas</option><option value="customer">Cliente A–Z</option></select></label></div></div>
+          <div className="quotes-list-toolbar"><h2>Cotizaciones recientes <span>{visibleQuotes.length}</span></h2><div className="quotes-filters"><label className="quotes-sort"><select aria-label="Tipo de cotización" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}><option value="all">Todos los tipos</option><option value="products">Productos</option><option value="services">Servicios de software</option></select></label><label className="quotes-search"><Search size={17} /><Input aria-label="Buscar cotización" placeholder="Buscar cliente, producto o servicio" value={query} onChange={e => setQuery(e.target.value)} /></label><label className="quotes-sort"><ArrowUpDown size={16} /><select aria-label="Ordenar cotizaciones" value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Más recientes</option><option value="oldest">Más antiguas</option><option value="customer">Cliente A–Z</option></select></label></div></div>
           {loadError && <div role="alert" className="quotes-error">{loadError}<Button variant="outline" onClick={refresh}>Reintentar</Button></div>}
           {loading && !list.length ? <div className="quotes-empty" role="status"><RefreshCw size={24} className="animate-spin" />Cargando cotizaciones…</div> : <>
-            <div className="quotes-table-heading" aria-hidden="true"><span>Cliente</span><span>Fecha</span><span>Productos</span><span>Total</span><span>Acciones</span></div>
+            <div className="quotes-table-heading" aria-hidden="true"><span>Cliente</span><span>Fecha</span><span>Conceptos</span><span>Inversión</span><span>Acciones</span></div>
             {visibleQuotes.map(q => <article key={q.id} className="quote-row">
-              <div className="quote-customer"><span className="quote-document-icon"><FileText size={22} /></span><div><button onClick={() => { setShareMsg(''); setPreviewQuote(q) }}>{q.customer || 'Sin cliente'}</button><span>Cotización · PDF</span></div></div>
+              <div className="quote-customer"><span className="quote-document-icon"><FileText size={22} /></span><div><button onClick={() => { setShareMsg(''); setPreviewQuote(q) }}>{q.customer || 'Sin cliente'}</button><span>{q.type==='services'?`Software · ${q.service?.title || ''}`:'Productos · PDF'}</span></div></div>
               <div className="quote-date"><CalendarDays size={15} /><time dateTime={quoteDate(q) || undefined}>{displayDate(q)}</time></div>
-              <div className="quote-products"><Package size={15} /><span>{q.items?.length || 0} <span className="quote-mobile-label">productos</span></span></div>
-              <div className="quote-total"><small className="quote-mobile-label">Total</small>{q.totalize === false ? <span className="quote-no-total">Sin totalizar</span> : <strong>{totalFor(q)}</strong>}</div>
+              <div className="quote-products">{q.type==='services'?<Code2 size={15}/>:<Package size={15}/>}<span>{q.type==='services'?q.service?.modules?.length || 0:q.items?.length || 0} <span className="quote-mobile-label">{q.type==='services'?'módulos':'productos'}</span></span></div>
+              <div className="quote-total"><small className="quote-mobile-label">Total</small>{q.type==='services'?<div className="quote-service-total"><strong>{serviceTotals(q.service).initial.toLocaleString('es-CO')} COP</strong>{serviceTotals(q.service).monthly>0 && <small>+ {serviceTotals(q.service).monthly.toLocaleString('es-CO')} COP / mes</small>}</div>:q.totalize === false ? <span className="quote-no-total">Sin totalizar</span> : <strong>{totalFor(q)}</strong>}</div>
               <div className="quote-actions"><Button variant="outline" title="Vista previa" aria-label={`Vista previa de ${q.customer}`} onClick={() => { setShareMsg(''); setPreviewQuote(q) }}><Eye size={17} /></Button><Button variant="ghost" title="Editar" aria-label={`Editar cotización de ${q.customer}`} onClick={() => { setEditingQuote(q); setEditOpen(true) }}><Pencil size={17} /></Button><a className="quote-download" href={`/api/quotes/${q.id}/pdf?download=1`} target="_blank" rel="noreferrer" title="Descargar PDF" aria-label={`Descargar PDF de ${q.customer}`}><Download size={17} /></a></div>
             </article>)}
             {!visibleQuotes.length && <div className="quotes-empty"><FileText size={30} /><h3>{query ? 'Sin coincidencias' : 'Tu primera cotización empieza aquí'}</h3><p>{query ? 'Prueba con otro cliente o producto.' : 'Crea una propuesta y consulta su PDF en este listado.'}</p><Button variant="outline" onClick={() => query ? setQuery('') : setOpen(true)}>{query ? 'Limpiar búsqueda' : 'Crear cotización'}</Button></div>}
