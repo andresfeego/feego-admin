@@ -37,7 +37,7 @@ export function buildQuote() {
         'Las vistas previas utilizarán título, descripción e imagen pública del portal, sujetas a la interpretación y caché de cada red. Compartir el enlace no equivale a subir automáticamente toda la galería al perfil personal.',
         'Publicaciones en Instagram: por definir.'),
       module('Directorio territorial, mapa y ranking de actividad',
-        'Vista interna de participantes con búsqueda y filtros por municipio y rol declarado. Mapa interactivo agregado por municipio para consultar cantidades de personas registradas y publicaciones aprobadas; no mostrará ubicaciones individuales, direcciones ni GPS.',
+        'Vista interna de participantes con búsqueda y filtros por municipio y rol declarado. Mapa interactivo agregado por municipio para consultar cantidades de personas registradas y publicaciones aprobadas.',
         'Ranking interno por cantidad de publicaciones aprobadas de cada participante en el período seleccionado, ordenado de mayor a menor, con los empates identificados por el mismo número de aportes. Los borradores, contenidos pendientes o retirados no sumarán.',
         'Los indicadores reflejarán actividad registrada en el portal. No medirán intención de voto, afinidad, influencia política ni actividad externa en redes sociales. La consulta estará limitada a los roles internos autorizados.'),
       module('Correos informativos y preferencias de comunicación',
